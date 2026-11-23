@@ -1,0 +1,24 @@
+{
+  "name": "agy-usage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure local, read-only Antigravity MCP App plugin for token/cost usage analytics, conversation context & Swarm monitoring, and storage inspection",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "node tools/clean-dist.mjs && tsc",
+    "ui:build": "npm --prefix ui run build",
+    "plugin:build": "node tools/install-plugin.mjs --build-only",
+    "plugin:install": "node tools/install-plugin.mjs",
+    "plugin:zip": "node tools/package-zip.mjs",
+    "test": "npm run build && npm run ui:build && node --test --test-timeout=60000 test/mcp-plugin.test.mjs test/conversation-context.test.mjs test/usage-charts.test.mjs test/security-boundaries.test.mjs",
+    "check:privacy": "node tools/check-privacy.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}

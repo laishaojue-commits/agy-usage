@@ -1,0 +1,12 @@
+{
+  "name": "agy-usage",
+  "displayName": "agy-usage",
+  "version": "0.0.0",
+  "description": "Pure local, read-only Antigravity SQLite token/cost usage analytics, context window monitor, and storage inspection plugin (zero credentials, zero process probing).",
+  "logo": "assets/logo.png",
+  "suggestedPrompts": [
+    "打开 agy-usage 面板查看今日 Token 消耗与等效费用",
+    "打开 agy-usage 检查本地存储体检与可清理缓存预览",
+    "打开 agy-usage 查看模型用量分布与缓存命中率"
+  ]
+}

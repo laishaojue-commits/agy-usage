@@ -1,0 +1,413 @@
+import { Worker } from 'node:worker_threads';
+import { randomUUID } from 'node:crypto';
+import type {
+  HudWorkerScanRequest,
+  HudWorkerScanResult,
+  SummariesContextQueryRequest,
+  SummariesContextQueryResult,
+  SummariesLookupRequest,
+  SummariesLookupResult,
+  UsageWorkerScanRequest,
+  UsageWorkerScanResult,
+} from './sqlite-worker.js';
+import { bt, getActiveLocale } from './i18n.js';
+
+const MAX_IDLE_WORKERS = 8;
+const IDLE_WORKER_TTL_MS = 35_000;
+const idleWorkers: Array<{ worker: Worker; timer: NodeJS.Timeout; cleanup: () => void }> = [];
+
+function acquirePooledWorker(path: string): Worker {
+  while (idleWorkers.length > 0) {
+    const entry = idleWorkers.pop()!;
+    entry.cleanup();
+    if (entry.worker.threadId < 0) continue;
+    entry.worker.ref();
+    if (path.length > 0) {
+      entry.worker.postMessage({ id: 'open', open: path, locale: getActiveLocale() });
+    }
+    return entry.worker;
+  }
+  return new Worker(new URL('./sqlite-worker.js', import.meta.url), {
+    workerData: { path, locale: getActiveLocale() },
+    execArgv: ['--disable-warning=ExperimentalWarning'],
+    resourceLimits: { maxOldGenerationSizeMb: 128 },
+  });
+}
+
+function releasePooledWorker(worker: Worker) {
+  if (idleWorkers.length >= MAX_IDLE_WORKERS || worker.threadId < 0) {
+    void worker.terminate();
+    return;
+  }
+  worker.unref();
+  const removeIdle = () => {
+    const idx = idleWorkers.findIndex(item => item.worker === worker);
+    if (idx >= 0) {
+      const [removed] = idleWorkers.splice(idx, 1);
+      clearTimeout(removed!.timer);
+    }
+    worker.removeListener('exit', onIdleExit);
+    worker.removeListener('error', onIdleError);
+  };
+  const onIdleExit = () => removeIdle();
+  const onIdleError = () => { removeIdle(); void worker.terminate(); };
+  worker.once('exit', onIdleExit);
+  worker.once('error', onIdleError);
+  const timer = setTimeout(() => {
+    removeIdle();
+    void worker.terminate();
+  }, IDLE_WORKER_TTL_MS);
+  timer.unref();
+  idleWorkers.push({ worker, timer, cleanup: removeIdle });
+}
+
+/** Bounded read-only statements; no transaction is retained while the caller parses batches. */
+export class SqliteReadSnapshot {
+  private worker: Worker;
+  private failure?: string;
+  private ended = false;
+  private tainted = false;
+  private pending?: { id: string; resolve: (value: any) => void; timer: NodeJS.Timeout };
+  private closeWaiter?: { id: string; resolve: () => void };
+  private onExit: () => void;
+  private onError: (error: Error) => void;
+  private onMessage: (result: any) => void;
+
+  constructor(path: string, private signal?: AbortSignal) {
+    this.worker = acquirePooledWorker(path);
+    this.onExit = () => {
+      this.ended = true;
+      this.tainted = true;
+      this.fail(this.failure || bt('sqlite.err.connection_closed'));
+      this.closeWaiter?.resolve();
+    };
+    this.onError = (error: Error) => {
+      this.tainted = true;
+      this.fail(error.message);
+    };
+    this.onMessage = (result: any) => {
+      if (result.startupError) { this.fail(result.startupError); return; }
+      if (result.closed && result.id === this.closeWaiter?.id) {
+        const waiter = this.closeWaiter;
+        this.closeWaiter = undefined;
+        waiter?.resolve();
+        return;
+      }
+      if (result.id !== this.pending?.id) return;
+      const pending = this.pending!;
+      this.pending = undefined;
+      clearTimeout(pending.timer);
+      pending.resolve(result);
+    };
+    this.worker.once('exit', this.onExit);
+    this.worker.on('error', this.onError);
+    this.worker.on('message', this.onMessage);
+    signal?.addEventListener('abort', this.abort, { once: true });
+  }
+  private abort = () => {
+    this.tainted = true;
+    this.fail(String(this.signal?.reason?.message ?? bt('sqlite.err.read_cancelled')));
+    void this.worker.terminate();
+  };
+  private fail(message: string) {
+    this.failure = message;
+    if (this.pending) {
+      const p = this.pending;
+      this.pending = undefined;
+      clearTimeout(p.timer);
+      p.resolve({ ok: false, rows: [], error: message });
+    }
+  }
+  async query(sql: string): Promise<{ok:boolean;rows:any[];error?:string}> {
+    return this.request({sql});
+  }
+  async verifyUnchanged(): Promise<boolean> { return (await this.request({ verify: true })).ok; }
+  async projectBlob(table:'gen_metadata'|'steps', column:'data'|'metadata', idx:number): Promise<{ok:boolean;rows:any[];error?:string}> {
+    return this.request({projection:{table,column,idx}});
+  }
+  private async request(payload: object): Promise<{ok:boolean;rows:any[];error?:string}> {
+    if(this.signal?.aborted)return{ok:false,rows:[],error:String(this.signal.reason?.message??bt('sqlite.err.read_cancelled'))};
+    if(this.ended||this.failure)return{ok:false,rows:[],error:this.failure||bt('sqlite.err.connection_closed')};
+    if(this.pending)return{ok:false,rows:[],error:bt('sqlite.err.concurrent_query')};
+    const id=randomUUID();
+    return new Promise(resolve=>{
+      const timer=setTimeout(()=>{this.tainted=true;this.fail(bt('sqlite.err.batch_budget'));void this.worker.terminate();},8000);
+      this.pending={id,resolve,timer};this.worker.postMessage({id,locale:getActiveLocale(),...payload});
+    });
+  }
+  async close() {
+    this.signal?.removeEventListener('abort', this.abort);
+    if (this.pending) {
+      this.tainted = true;
+      this.fail(bt('sqlite.err.connection_closed'));
+    }
+    if (!this.ended && !this.tainted) {
+      const closeId = `close-${randomUUID()}`;
+      let timer: NodeJS.Timeout | undefined;
+      const closedPromise = new Promise<boolean>(resolve => {
+        this.closeWaiter = { id: closeId, resolve: () => resolve(true) };
+        timer = setTimeout(() => { this.closeWaiter = undefined; resolve(false); }, 1000);
+      });
+      this.worker.postMessage({ id: closeId, close: true, reusable: true });
+      const reusableOk = await closedPromise;
+      clearTimeout(timer);
+      this.detachListeners();
+      if (reusableOk && !this.ended && !this.tainted) {
+        releasePooledWorker(this.worker);
+        return;
+      }
+    }
+    this.detachListeners();
+    await this.worker.terminate().catch(() => {});
+  }
+  private detachListeners() {
+    this.worker.removeListener('exit', this.onExit);
+    this.worker.removeListener('error', this.onError);
+    this.worker.removeListener('message', this.onMessage);
+  }
+}
+
+/**
+ * 在只读 Worker 线程池中执行单次无长事务 HUD 数据库增量/全量扫描，
+ * 单次请求内自动提交并立即关闭 SQLite 句柄，绝不阻塞主进程事件循环或宿主 wal_checkpoint。
+ */
+export async function runHudDbScanInWorker(
+  hudScan: HudWorkerScanRequest,
+  timeoutMs = 3000
+): Promise<HudWorkerScanResult> {
+  const worker = acquirePooledWorker('');
+  const id = randomUUID();
+  return new Promise<HudWorkerScanResult>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      worker.removeListener('message', onMessage);
+      worker.removeListener('error', onError);
+      worker.removeListener('exit', onExit);
+    };
+    const onMessage = (msg: any) => {
+      if (!msg || msg.id !== id || settled) return;
+      settled = true;
+      cleanup();
+      releasePooledWorker(worker);
+      if (msg.ok && msg.hudResult) {
+        resolve(msg.hudResult as HudWorkerScanResult);
+      } else {
+        reject(new Error(msg.error || bt('sqlite.err.hud_read_failed')));
+      }
+    };
+    const onError = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      reject(err);
+    };
+    const onExit = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(bt('sqlite.err.hud_worker_crashed')));
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      reject(new Error(bt('sqlite.err.hud_timeout_budget')));
+    }, timeoutMs);
+
+    worker.on('message', onMessage);
+    worker.once('error', onError);
+    worker.once('exit', onExit);
+    worker.postMessage({ id, hudScan, locale: getActiveLocale() });
+  });
+}
+
+export async function runUsageDbScanInWorker(
+  usageScan: UsageWorkerScanRequest,
+  signal?: AbortSignal,
+  timeoutMs = 8000
+): Promise<UsageWorkerScanResult> {
+  if (signal?.aborted) {
+    return {
+      ok: false,
+      error: String((signal.reason as Error | undefined)?.message ?? bt('sqlite.err.read_cancelled')),
+      genRows: [],
+      stepSchemaOk: true,
+      stepRows: [],
+    };
+  }
+  const worker = acquirePooledWorker('');
+  const id = randomUUID();
+  return new Promise<UsageWorkerScanResult>((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      worker.removeListener('message', onMessage);
+      worker.removeListener('error', onError);
+      worker.removeListener('exit', onExit);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve({
+        ok: false,
+        error: String((signal?.reason as Error | undefined)?.message ?? bt('sqlite.err.read_cancelled')),
+        genRows: [],
+        stepSchemaOk: true,
+        stepRows: [],
+      });
+    };
+    const onMessage = (msg: any) => {
+      if (!msg || msg.id !== id || settled) return;
+      settled = true;
+      cleanup();
+      releasePooledWorker(worker);
+      if (msg.ok && msg.usageResult) {
+        resolve(msg.usageResult as UsageWorkerScanResult);
+      } else {
+        resolve({
+          ok: false,
+          error: msg.error || bt('sqlite.err.connection_closed'),
+          genRows: [],
+          stepSchemaOk: true,
+          stepRows: [],
+        });
+      }
+    };
+    const onError = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve({ ok: false, error: err.message, genRows: [], stepSchemaOk: true, stepRows: [] });
+    };
+    const onExit = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ ok: false, error: bt('sqlite.err.connection_closed'), genRows: [], stepSchemaOk: true, stepRows: [] });
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve({ ok: false, error: bt('sqlite.err.batch_budget'), genRows: [], stepSchemaOk: true, stepRows: [] });
+    }, timeoutMs);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+    worker.on('message', onMessage);
+    worker.once('error', onError);
+    worker.once('exit', onExit);
+    worker.postMessage({ id, usageScan, locale: getActiveLocale() });
+  });
+}
+
+export async function runSummariesLookupInWorker(
+  summariesLookup: SummariesLookupRequest,
+  timeoutMs = 1500
+): Promise<SummariesLookupResult | null> {
+  const worker = acquirePooledWorker('');
+  const id = randomUUID();
+  return new Promise<SummariesLookupResult | null>((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      worker.removeListener('message', onMessage);
+      worker.removeListener('error', onError);
+      worker.removeListener('exit', onExit);
+    };
+    const onMessage = (msg: any) => {
+      if (!msg || msg.id !== id || settled) return;
+      settled = true;
+      cleanup();
+      releasePooledWorker(worker);
+      if (msg.ok && msg.summariesResult) {
+        resolve(msg.summariesResult as SummariesLookupResult);
+      } else {
+        resolve(null);
+      }
+    };
+    const onError = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve(null);
+    };
+    const onExit = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(null);
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve(null);
+    }, timeoutMs);
+    worker.on('message', onMessage);
+    worker.once('error', onError);
+    worker.once('exit', onExit);
+    worker.postMessage({ id, summariesLookup, locale: getActiveLocale() });
+  });
+}
+
+export async function runSummariesContextQueryInWorker(
+  summariesContextQuery: SummariesContextQueryRequest,
+  timeoutMs = 2500
+): Promise<SummariesContextQueryResult | null> {
+  const worker = acquirePooledWorker('');
+  const id = randomUUID();
+  return new Promise<SummariesContextQueryResult | null>((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      worker.removeListener('message', onMessage);
+      worker.removeListener('error', onError);
+      worker.removeListener('exit', onExit);
+    };
+    const onMessage = (msg: any) => {
+      if (!msg || msg.id !== id || settled) return;
+      settled = true;
+      cleanup();
+      releasePooledWorker(worker);
+      if (msg.ok && msg.summariesContextResult) {
+        resolve(msg.summariesContextResult as SummariesContextQueryResult);
+      } else {
+        resolve(null);
+      }
+    };
+    const onError = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve(null);
+    };
+    const onExit = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(null);
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate();
+      resolve(null);
+    }, timeoutMs);
+    worker.on('message', onMessage);
+    worker.once('error', onError);
+    worker.once('exit', onExit);
+    worker.postMessage({ id, summariesContextQuery, locale: getActiveLocale() });
+  });
+}

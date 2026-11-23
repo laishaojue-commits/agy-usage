@@ -1,0 +1,29 @@
+#!/bin/sh
+# agy-usage pre-push gate hook: privacy gate + full build/test suite
+if [ "$AGY_USAGE_SKIP_PRE_PUSH" = "1" ]; then
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO_ROOT" || exit 1
+
+has_real_push=0
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+  case "$local_sha" in
+    ""|0000000000000000000000000000000000000000|0000000000000000000000000000000000000000000000000000000000000000)
+      continue
+      ;;
+  esac
+  if [ "$local_ref" = "(delete)" ]; then
+    continue
+  fi
+  has_real_push=1
+done
+
+if [ "$has_real_push" -eq 0 ]; then
+  exit 0
+fi
+
+node tools/check-privacy.mjs --include-build --git-history || exit $?
+npm test
+exit $?

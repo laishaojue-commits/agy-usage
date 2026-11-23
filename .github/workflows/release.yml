@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, Verify & Publish Release ZIP
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      TZ: UTC
+    steps:
+      - name: Validate Tag Matches Package Version
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "Invalid tag format: $RELEASE_TAG" >&2; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify Version Consistency
+        shell: bash
+        run: |
+          PKG_VER=$(node -e "console.log(JSON.parse(require('node:fs').readFileSync('package.json','utf8')).version)")
+          if [ "v${PKG_VER}" != "$RELEASE_TAG" ]; then
+            echo "Tag $RELEASE_TAG does not match package.json version v$PKG_VER" >&2
+            exit 1
+          fi
+
+      - name: Install Locked Dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix ui ci --ignore-scripts
+          npm --prefix plugin ci --omit=dev --ignore-scripts
+
+      - name: Build, Test & Package
+        run: |
+          npm run build
+          npm run ui:build
+          npm run plugin:build
+          npm run plugin:zip
+          npm test
+          npm run check:privacy -- --include-build --git-history
+
+      - name: Publish GitHub Release Assets
+        shell: bash
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          ZIP_PATH="artifacts/agy-usage-v${VERSION}.zip"
+          SUMS_PATH="artifacts/SHA256SUMS.txt"
+          gh release create "$RELEASE_TAG" "$ZIP_PATH" "$SUMS_PATH" \
+            --verify-tag \
+            --title "agy-usage $RELEASE_TAG" \
+            --generate-notes

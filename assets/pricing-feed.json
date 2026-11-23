@@ -1,0 +1,734 @@
+{
+  "version": "2026-11-19-r2",
+  "schema": 1,
+  "updatedAt": "2026-11-19T05:00:00Z",
+  "source": "https://raw.githubusercontent.com/Enzoo404/gravitybox/main/assets/pricing-feed.json",
+  "aliases": {
+    "gemini-pro-orchestrator-g1-pro": "gemini-4-argon",
+    "gemini-pro-orchestrator-argon": "gemini-4-argon",
+    "gemini-pro-orchestrator-neon": "gemini-4-neon",
+    "gemini-pro-orchestrator": "gemini-4-argon",
+    "orchestrator (argon)": "gemini-4-argon",
+    "Orchestrator (Argon)": "gemini-4-argon",
+    "orchestrator (carbon)": "gemini-4-carbon",
+    "Orchestrator (Carbon)": "gemini-4-carbon",
+    "orchestrator (neon)": "gemini-4-neon",
+    "Orchestrator (Neon)": "gemini-4-neon",
+    "gemini-flash-worker-agy": "gemini-3.8-flash",
+    "gemini-flash-worker": "gemini-3.8-flash",
+    "Gemini Flash": "gemini-3.8-flash",
+    "gemini-flash": "gemini-3.8-flash",
+    "gemini-4-hydrogen-tiered": "gemini-4-hydrogen",
+    "gemini-4-hydrogen-tiered-low": "gemini-4-hydrogen",
+    "gemini-4-hydrogen-tiered-medium": "gemini-4-hydrogen",
+    "gemini-4-hydrogen-tiered-high": "gemini-4-hydrogen",
+    "gemini-4-hydrogen-tiered-xhigh": "gemini-4-hydrogen",
+    "gemini-4-hydrogen-tiered-extra": "gemini-4-hydrogen",
+    "gemini-4-hydrogen-tiered-extra-high": "gemini-4-hydrogen",
+    "gemini-4-neon-tiered": "gemini-4-neon",
+    "gemini-4-neon-tiered-low": "gemini-4-neon",
+    "gemini-4-neon-tiered-medium": "gemini-4-neon",
+    "gemini-4-neon-tiered-high": "gemini-4-neon",
+    "gemini-4-neon-tiered-xhigh": "gemini-4-neon",
+    "gemini-4-neon-tiered-extra": "gemini-4-neon",
+    "gemini-4-neon-tiered-extra-high": "gemini-4-neon",
+    "MODEL_PLACEHOLDER_M667": "gemini-4-carbon",
+    "MODEL_PLACEHOLDER_M668": "gemini-4-argon",
+    "MODEL_PLACEHOLDER_M669": "gemini-3.8-flash",
+    "MODEL_PLACEHOLDER_M681": "gemini-4-argon"
+  },
+  "activeModels": [
+    "gemini-4-carbon",
+    "gemini-4-argon",
+    "gemini-4-neon",
+    "gemini-4-hydrogen",
+    "gemini-3.8-flash",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "gpt-oss-120b"
+  ],
+  "feedModels": [
+    "gemini-3.8-flash",
+    "gemini-3.8-pro",
+    "gemini-3.1-pro",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-4-argon",
+    "gemini-4-carbon",
+    "gemini-4-hydrogen",
+    "gemini-4-neon",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-3-7-sonnet",
+    "claude-3-5-sonnet",
+    "claude-3-5-haiku",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-oss-120b",
+    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash-lite"
+  ],
+  "models": {
+    "gemini-3.8-flash": {
+      "displayName": "Gemini 3.8 Flash",
+      "capacityTokens": 200000
+    },
+    "gemini-3.8-pro": {
+      "displayName": "Gemini 3.8 Pro",
+      "capacityTokens": 200000
+    },
+    "gemini-3.1-pro": {
+      "displayName": "Gemini 3.1 Pro",
+      "capacityTokens": 200000
+    },
+    "gemini-2.5-pro": {
+      "displayName": "Gemini 2.5 Pro",
+      "capacityTokens": 200000
+    },
+    "gemini-2.5-flash": {
+      "displayName": "Gemini 2.5 Flash",
+      "capacityTokens": 200000
+    },
+    "gemini-4-argon": {
+      "displayName": "Gemini 4 Argon",
+      "capacityTokens": 200000
+    },
+    "gemini-4-carbon": {
+      "displayName": "Gemini 4 Carbon",
+      "capacityTokens": 200000
+    },
+    "gemini-4-hydrogen": {
+      "displayName": "Gemini 4 Hydrogen",
+      "capacityTokens": 200000
+    },
+    "gemini-4-neon": {
+      "displayName": "Gemini 4 Neon",
+      "capacityTokens": 200000
+    },
+    "claude-opus-5-5": {
+      "displayName": "Claude Opus 5.5",
+      "capacityTokens": 200000
+    },
+    "claude-sonnet-5-5": {
+      "displayName": "Claude Sonnet 5.5",
+      "capacityTokens": 200000
+    },
+    "claude-opus-4-6": {
+      "displayName": "Claude Opus 4.6",
+      "capacityTokens": 200000
+    },
+    "claude-sonnet-4-6": {
+      "displayName": "Claude Sonnet 4.6",
+      "capacityTokens": 200000
+    },
+    "claude-3-7-sonnet": {
+      "displayName": "Claude 3.7 Sonnet",
+      "capacityTokens": 200000
+    },
+    "claude-3-5-sonnet": {
+      "displayName": "Claude 3.5 Sonnet",
+      "capacityTokens": 200000
+    },
+    "claude-3-5-haiku": {
+      "displayName": "Claude 3.5 Haiku",
+      "capacityTokens": 200000
+    },
+    "gpt-4o": {
+      "displayName": "GPT-4o",
+      "capacityTokens": 128000
+    },
+    "gpt-4o-mini": {
+      "displayName": "GPT-4o mini",
+      "capacityTokens": 128000
+    },
+    "gpt-oss-120b": {
+      "displayName": "GPT-OSS 120B",
+      "capacityTokens": 128000
+    },
+    "gemini-2.5-flash-lite": {
+      "displayName": "Gemini 2.5 Flash Lite",
+      "capacityTokens": 200000
+    },
+    "gemini-3.5-flash-lite": {
+      "displayName": "Gemini 3.5 Flash Lite",
+      "capacityTokens": 200000
+    }
+  },
+  "prices": {
+    "gemini-3.8-flash": [
+      {
+        "model": "gemini-3.8-flash",
+        "validFrom": null,
+        "validUntil": "2026-12-31T23:59:59Z",
+        "input": 0.75,
+        "output": 3.75,
+        "cached": 0.075,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "文本基准；输入/输出采用限时优惠；缓存采用缓存读取基准，优惠截至2026-12-31",
+          "checkedAt": "2026-11-02",
+          "validUntil": "2026-12-31T23:59:59Z",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Text benchmark; promotional input/output rate and cache-read rate through 2026-12-31"
+        }
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "validFrom": "2027-01-01T00:00:00Z",
+        "validUntil": null,
+        "input": 1.5,
+        "output": 7.5,
+        "cached": 0.15,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "文本基准；恢复为标准全量定价（2027-01-01生效）",
+          "checkedAt": "2026-11-02",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Text benchmark; reverted to standard list pricing (effective 2027-01-01)"
+        }
+      }
+    ],
+    "gemini-3.8-pro": [
+      {
+        "model": "gemini-3.8-pro",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 4,
+        "output": 18,
+        "cached": 0.4,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Gemini 3.8 Pro 高阶推理模型标准基准",
+          "checkedAt": "2026-11-02",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Gemini 3.8 Pro reasoning model standard benchmark"
+        }
+      }
+    ],
+    "gemini-3.1-pro": [
+      {
+        "model": "gemini-3.1-pro",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 2,
+        "output": 12,
+        "cached": 0.2,
+        "contextTiers": [
+          {
+            "thresholdTokens": 200000,
+            "input": 4,
+            "output": 18,
+            "cached": 0.4
+          }
+        ],
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Gemini 3.1 Pro 标准文本基准 (<=200k Tokens)",
+          "checkedAt": "2026-11-02",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Gemini 3.1 Pro standard text benchmark (<=200k tokens)"
+        }
+      }
+    ],
+    "gemini-2.5-pro": [
+      {
+        "model": "gemini-2.5-pro",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 1.25,
+        "output": 10,
+        "cached": 0.125,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "沿用历史基准；不代表所有区域、长上下文或缓存写入单价；需按来源逐项核对",
+          "checkedAt": null,
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Historical benchmark; excludes regional, long-context, or cache-write surcharges; verify against official source"
+        }
+      }
+    ],
+    "gemini-2.5-flash": [
+      {
+        "model": "gemini-2.5-flash",
+        "input": 0.3,
+        "output": 2.5,
+        "cached": 0.03,
+        "validFrom": "2026-11-12T00:00:00Z",
+        "validUntil": null,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 标准文本参考价；2026-11-12为本地核价起点，不代表官方调价日期",
+          "checkedAt": "2026-11-12",
+          "validFrom": "2026-11-12T00:00:00Z",
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud standard text reference rate; 2026-11-12 marks local audit baseline rather than an official price-change date"
+        }
+      }
+    ],
+    "gemini-4-argon": [
+      {
+        "model": "gemini-4-argon",
+        "validFrom": null,
+        "validUntil": "2026-11-30T23:59:59Z",
+        "input": 2,
+        "output": 10,
+        "cached": 0.1,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方推广期标准 Global API 文本基准（优惠截至2026-11-30）",
+          "checkedAt": "2026-11-02",
+          "validUntil": "2026-11-30T23:59:59Z",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official promotional Global API text benchmark (promotional through 2026-11-30)"
+        }
+      },
+      {
+        "model": "gemini-4-argon",
+        "validFrom": "2026-12-01T00:00:00Z",
+        "validUntil": null,
+        "input": 4,
+        "output": 20,
+        "cached": 0.2,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Argon 标准定价（2026-12-01生效）",
+          "checkedAt": "2026-11-02",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Argon standard pricing (effective 2026-12-01)"
+        }
+      }
+    ],
+    "gemini-4-carbon": [
+      {
+        "model": "gemini-4-carbon",
+        "input": 2,
+        "output": 10,
+        "cached": 0.1,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方推广期标准 Global API 文本基准（优惠截至2026-11-30）",
+          "checkedAt": "2026-11-13",
+          "validUntil": "2026-11-30T23:59:59Z",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official promotional Global API text benchmark (promotional through 2026-11-30)"
+        },
+        "validFrom": null,
+        "validUntil": "2026-11-30T23:59:59Z"
+      },
+      {
+        "model": "gemini-4-carbon",
+        "input": 4,
+        "output": 20,
+        "cached": 0.2,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Carbon 标准定价（2026-12-01生效）",
+          "checkedAt": "2026-11-13",
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Carbon standard pricing (effective 2026-12-01)"
+        },
+        "validFrom": "2026-12-01T00:00:00Z",
+        "validUntil": null
+      }
+    ],
+    "gemini-4-hydrogen": [
+      {
+        "model": "gemini-4-hydrogen",
+        "validFrom": null,
+        "validUntil": "2027-01-11T23:59:59Z",
+        "input": 1.5,
+        "output": 7.5,
+        "cached": 0.075,
+        "cacheWrite": 0,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Gemini 4 Hydrogen 标准 Global API 文本基准（<=200k Tokens；缓存写入 $1.875 自 2027-01-12 起生效）",
+          "checkedAt": "2026-11-13",
+          "validUntil": "2027-01-11T23:59:59Z",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Gemini 4 Hydrogen standard Global API text benchmark (<=200k tokens; cache write $1.875 effective 2027-01-12)"
+        }
+      },
+      {
+        "model": "gemini-4-hydrogen",
+        "validFrom": "2027-01-12T00:00:00Z",
+        "validUntil": null,
+        "input": 1.5,
+        "output": 7.5,
+        "cached": 0.075,
+        "cacheWrite": 1.875,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Gemini 4 Hydrogen 标准 Global API 文本基准（<=200k Tokens；含缓存写入 $1.875）",
+          "checkedAt": "2026-11-13",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Gemini 4 Hydrogen standard Global API text benchmark (<=200k tokens; includes cache write $1.875)"
+        }
+      }
+    ],
+    "gemini-4-neon": [
+      {
+        "model": "gemini-4-neon",
+        "validFrom": null,
+        "validUntil": "2027-01-11T23:59:59Z",
+        "input": 3,
+        "output": 15,
+        "cached": 0.15,
+        "cacheWrite": 0,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Gemini 4 Neon 标准 Global API 文本基准（<=200k Tokens；缓存写入 $3.75 自 2027-01-12 起生效）",
+          "checkedAt": "2026-11-19",
+          "validUntil": "2027-01-11T23:59:59Z",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Gemini 4 Neon standard Global API text benchmark (<=200k tokens; cache write $3.75 effective 2027-01-12)"
+        }
+      },
+      {
+        "model": "gemini-4-neon",
+        "validFrom": "2027-01-12T00:00:00Z",
+        "validUntil": null,
+        "input": 3,
+        "output": 15,
+        "cached": 0.15,
+        "cacheWrite": 3.75,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 官方 Gemini 4 Neon 标准 Global API 文本基准（<=200k Tokens；含缓存写入 $3.75）",
+          "checkedAt": "2026-11-19",
+          "verification": "confirmed",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud official Gemini 4 Neon standard Global API text benchmark (<=200k tokens; includes cache write $3.75)"
+        }
+      }
+    ],
+    "claude-opus-5-5": [
+      {
+        "model": "claude-opus-5-5",
+        "validFrom": null,
+        "validUntil": "2026-10-31T23:59:59Z",
+        "input": 5,
+        "output": 25,
+        "cached": 0.5,
+        "cacheWrite": 6.25,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "前期参考 Claude Opus 标准 API 文本基准估算（含 Medium / High / Thinking 变体）",
+          "checkedAt": "2026-10-23",
+          "verification": "historical",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Previously estimated from Claude Opus standard API text benchmark (including Medium / High / Thinking variants)"
+        }
+      },
+      {
+        "model": "claude-opus-5-5",
+        "validFrom": "2026-11-01T00:00:00Z",
+        "validUntil": null,
+        "input": 4,
+        "output": 20,
+        "cached": 0.2,
+        "cacheWrite": 5,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "Anthropic 官方 Claude Opus 5.5 标准 API 最新降价（含 Medium / High / Thinking 变体）",
+          "checkedAt": "2026-11-02",
+          "verification": "confirmed",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Anthropic official Claude Opus 5.5 standard API updated pricing (including Medium / High / Thinking variants)"
+        }
+      }
+    ],
+    "claude-sonnet-5-5": [
+      {
+        "model": "claude-sonnet-5-5",
+        "validFrom": null,
+        "validUntil": "2026-10-31T23:59:59Z",
+        "input": 3,
+        "output": 15,
+        "cached": 0.3,
+        "cacheWrite": 3.75,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "前期参考 Claude Sonnet 系列标准 API 文本基准估算",
+          "checkedAt": "2026-10-23",
+          "verification": "historical",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Previously estimated from Claude Sonnet series standard API text benchmark"
+        }
+      },
+      {
+        "model": "claude-sonnet-5-5",
+        "validFrom": "2026-11-01T00:00:00Z",
+        "validUntil": null,
+        "input": 2,
+        "output": 10,
+        "cached": 0.1,
+        "cacheWrite": 2.5,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "Anthropic 官方 Claude Sonnet 5.5 标准 API 最新降价",
+          "checkedAt": "2026-11-02",
+          "verification": "confirmed",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Anthropic official Claude Sonnet 5.5 standard API updated pricing"
+        }
+      }
+    ],
+    "claude-opus-4-6": [
+      {
+        "model": "claude-opus-4-6",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 5,
+        "output": 25,
+        "cached": 0.5,
+        "cacheWrite": 6.25,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "沿用历史基准；缓存读取 $0.50/MTok，缓存写入 $6.25/MTok",
+          "checkedAt": "2026-10-22",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Historical benchmark; cache read $0.50/MTok, cache write $6.25/MTok"
+        }
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "model": "claude-sonnet-4-6",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 3,
+        "output": 15,
+        "cached": 0.3,
+        "cacheWrite": 3.75,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "文本基准；缓存读取 $0.30/MTok，缓存写入 $3.75/MTok；不含工具费用",
+          "checkedAt": "2026-10-23",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Text benchmark; cache read $0.30/MTok, cache write $3.75/MTok; excludes tool charges"
+        }
+      }
+    ],
+    "claude-3-7-sonnet": [
+      {
+        "model": "claude-3-7-sonnet",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 3,
+        "output": 15,
+        "cached": 0.3,
+        "cacheWrite": 3.75,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "沿用历史基准；不代表所有区域、长上下文或缓存写入单价；需按来源逐项核对",
+          "checkedAt": null,
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Historical benchmark; excludes regional, long-context, or cache-write surcharges; verify against official source"
+        }
+      }
+    ],
+    "claude-3-5-sonnet": [
+      {
+        "model": "claude-3-5-sonnet",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 3,
+        "output": 15,
+        "cached": 0.3,
+        "cacheWrite": 3.75,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "沿用历史基准；不代表所有区域、长上下文或缓存写入单价；需按来源逐项核对",
+          "checkedAt": null,
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Historical benchmark; excludes regional, long-context, or cache-write surcharges; verify against official source"
+        }
+      }
+    ],
+    "claude-3-5-haiku": [
+      {
+        "model": "claude-3-5-haiku",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 1,
+        "output": 5,
+        "cached": 0.1,
+        "cacheWrite": 1.25,
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+          "platform": "Anthropic 标准 API",
+          "conditions": "Anthropic 官方 Claude 3.5 Haiku 标准文本基准",
+          "checkedAt": "2026-11-12",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "confirmed",
+          "platformEn": "Anthropic Standard API",
+          "conditionsEn": "Anthropic official Claude 3.5 Haiku standard text benchmark"
+        }
+      }
+    ],
+    "gpt-4o": [
+      {
+        "model": "gpt-4o",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 2.5,
+        "output": 10,
+        "cached": 1.25,
+        "provenance": {
+          "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+          "platform": "OpenAI 标准 API",
+          "conditions": "沿用历史基准；不代表所有区域、长上下文或缓存写入单价；需按来源逐项核对",
+          "checkedAt": null,
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "OpenAI Standard API",
+          "conditionsEn": "Historical benchmark; excludes regional, long-context, or cache-write surcharges; verify against official source"
+        }
+      }
+    ],
+    "gpt-4o-mini": [
+      {
+        "model": "gpt-4o-mini",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 0.15,
+        "output": 0.6,
+        "cached": 0.075,
+        "provenance": {
+          "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+          "platform": "OpenAI 标准 API",
+          "conditions": "沿用历史基准；不代表所有区域、长上下文或缓存写入单价；需按来源逐项核对",
+          "checkedAt": null,
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "OpenAI Standard API",
+          "conditionsEn": "Historical benchmark; excludes regional, long-context, or cache-write surcharges; verify against official source"
+        }
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "model": "gpt-oss-120b",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 0.15,
+        "output": 0.6,
+        "cached": 0.075,
+        "provenance": {
+          "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+          "platform": "开放权重模型 API 参考基准",
+          "conditions": "参考同类开放权重 120B 模型公开 API 基准估算",
+          "checkedAt": "2026-10-23",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "Open-Weight Model API Reference Benchmark",
+          "conditionsEn": "Estimated from comparable open-weight 120B model public API benchmarks"
+        }
+      }
+    ],
+    "gemini-2.5-flash-lite": [
+      {
+        "model": "gemini-2.5-flash-lite",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 0.1,
+        "output": 0.4,
+        "cached": 0.01,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 标准文本参考价（Gemini 2.5 Flash-Lite 历史基准）",
+          "checkedAt": "2026-11-18",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud standard text reference rate (Gemini 2.5 Flash-Lite historical benchmark)"
+        }
+      }
+    ],
+    "gemini-3.5-flash-lite": [
+      {
+        "model": "gemini-3.5-flash-lite",
+        "validFrom": null,
+        "validUntil": null,
+        "input": 0.3,
+        "output": 2.5,
+        "cached": 0.03,
+        "provenance": {
+          "sourceUrl": "https://cloud.google.com/model-garden/pricing?hl=en",
+          "platform": "Google Cloud 标准 Global API",
+          "conditions": "Google Cloud 标准文本参考价（Gemini 3.5 Flash-Lite 历史基准）",
+          "checkedAt": "2026-11-18",
+          "validFrom": null,
+          "validUntil": null,
+          "verification": "historical",
+          "platformEn": "Google Cloud Standard Global API",
+          "conditionsEn": "Google Cloud standard text reference rate (Gemini 3.5 Flash-Lite historical benchmark)"
+        }
+      }
+    ]
+  }
+}

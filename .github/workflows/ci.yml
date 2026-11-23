@@ -1,0 +1,62 @@
+name: CI Verification
+
+on:
+  pull_request:
+    branches: [main, 'feature/**', 'release/**']
+  push:
+    branches: [main, 'feature/**', 'release/**']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  TZ: UTC
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build, Package & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Locked Dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix ui ci --ignore-scripts
+          npm --prefix plugin ci --omit=dev --ignore-scripts
+
+      - name: Build Backend
+        run: npm run build
+
+      - name: Build MCP App UI
+        run: npm run ui:build
+
+      - name: Build & Verify Plugin Bundle
+        run: npm run plugin:build
+
+      - name: Package Plugin ZIP
+        run: npm run plugin:zip
+
+      - name: Run Cross-Platform Tests
+        run: npm test
+
+      - name: Run Privacy Gate (Working Tree, Build Artifacts & Git History)
+        run: npm run check:privacy -- --include-build --git-history

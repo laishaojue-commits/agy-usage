@@ -1,0 +1,9 @@
+node_modules/
+dist/
+ui/dist-mcp/
+artifacts/
+.cache/
+*.log
+.env*
+.DS_Store
+Thumbs.db

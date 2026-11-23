@@ -1,0 +1,173 @@
+import { open, lstat, unlink, mkdir, readFile } from 'node:fs/promises';
+import { renameSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { bt } from './i18n.js';
+import { isOwnedByCurrentUser } from './platform/fs-guard.js';
+import { pathsEqual } from './platform/paths.js';
+
+export interface AtomicWriteOptions {
+  durability?: 'strict' | 'relaxed';
+}
+
+/** Write completely before committing; cancellation and rename share one event-loop turn. */
+export async function atomicText(path: string, text: string, signal?: AbortSignal, options?: AtomicWriteOptions): Promise<void> {
+  const strict = options?.durability !== 'relaxed';
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  try {
+    const info = await lstat(path);
+    if (!isOwnedByCurrentUser(info)) throw new Error(bt('files.refuse_non_user_file'));
+  } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  const temp = `${path}.${randomUUID()}.tmp`;
+  try {
+    signal?.throwIfAborted();
+    const handle = await open(temp, 'wx', 0o600);
+    try {
+      await handle.writeFile(text);
+      // fsync the payload before the rename: rename is atomic for the namespace, not for the data.
+      if (strict) await handle.sync();
+    } finally { await handle.close(); }
+    signal?.throwIfAborted();
+    renameSync(temp, path);
+    if (strict) {
+      // Persist the directory entry as well, otherwise a power loss can roll the rename back.
+      const dir = await open(dirname(path), 'r').catch(() => null);
+      if (dir) { try { await dir.sync(); } catch { /* filesystems without directory fsync */ } finally { await dir.close(); } }
+    }
+  } finally { await unlink(temp).catch(() => {}); }
+}
+
+export async function atomicJson(path: string, value: unknown, signal?: AbortSignal, options?: AtomicWriteOptions): Promise<void> {
+  await atomicText(path, JSON.stringify(value, null, 2) + '\n', signal, options);
+}
+
+export async function readBoundedText(path: string, maxBytes: number): Promise<string> {
+  if (!(await lstat(path)).isFile()) throw new Error('Expected a regular file');
+  const file = await open(path, 'r');
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size > maxBytes) throw new Error('Text file exceeds read budget');
+    const chunks: Buffer[] = [];
+    let size = 0;
+    while (size <= maxBytes) {
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes - size + 1));
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+      if (!bytesRead) return Buffer.concat(chunks, size).toString('utf8');
+      chunks.push(buffer.subarray(0, bytesRead));
+      size += bytesRead;
+    }
+    throw new Error('Text file exceeds read budget');
+  } finally { await file.close(); }
+}
+
+/** Read an optional JSON file; returns null silently on ENOENT, warns on corrupt/unreadable content. */
+export async function readOptionalJson<T = Record<string, unknown>>(path: string, label?: string, maxBytes?: number): Promise<T | null> {
+  try {
+    return JSON.parse(await (maxBytes ? readBoundedText(path, maxBytes) : readFile(path, 'utf8'))) as T;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn(
+        bt('files.optional_json_read_failed', {
+          name: label ?? basenameForLog(path),
+          error: sanitizeError((error as Error)?.message ?? String(error)),
+        })
+      );
+    }
+    return null;
+  }
+}
+
+function basenameForLog(filePath: string): string {
+  const idx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return idx >= 0 ? filePath.slice(idx + 1) : filePath;
+}
+
+type FileChange = { path: string; before: string | null; after: string | null };
+/** A recoverable file-set transaction. Caller holds the accounts write lease. */
+export async function recoverFileSet(journalPath: string, allowedPaths: string[]): Promise<void> {
+  const raw = await readOptional(journalPath);
+  if (raw === null) return;
+  const changes = JSON.parse(raw).changes as FileChange[];
+  if (!Array.isArray(changes) || !changes.length || changes.some(change =>
+    !allowedPaths.includes(change.path) || ![change.before, change.after].every(value => value === null || typeof value === 'string')))
+    throw new Error(bt('files.delete_journal_invalid'));
+  for (const change of changes) {
+    const current = await readOptional(change.path);
+    if (current !== change.before && current !== change.after) throw new Error(bt('files.delete_file_modified'));
+  }
+  for (const change of changes) {
+    if (await readOptional(change.path) === change.after) continue;
+    if (change.after === null) await unlink(change.path);
+    else await atomicText(change.path, change.after);
+  }
+  await unlink(journalPath);
+}
+
+export async function commitFileSet(journalPath: string, values: { path: string; after: string | null }[]): Promise<void> {
+  const changes: FileChange[] = [];
+  for (const value of values) {
+    const info = await lstat(value.path).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+    if (info && !isOwnedByCurrentUser(info)) throw new Error(bt('files.delete_identity_mismatch'));
+    changes.push({ ...value, before: await readOptional(value.path) });
+  }
+  await atomicJson(journalPath, { schema: 1, changes });
+  // A crash is completed forward by init; errors retain the journal rather than claiming failure rolled back.
+  try { await recoverFileSet(journalPath, changes.map(change => change.path)); }
+  catch { throw new Error(bt('files.delete_incomplete')); }
+}
+
+type AccountCommit = { accountPath:string; indexPath:string; beforeAccount:string|null; beforeIndex:string|null; afterAccount:string; afterIndex:string };
+async function readOptional(path:string) {try{return await readFile(path,'utf8');}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}}
+async function restoreCommit(record:AccountCommit, forward:boolean) {
+  for(const [path,before,after] of [[record.accountPath,record.beforeAccount,record.afterAccount],[record.indexPath,record.beforeIndex,record.afterIndex]] as const) {
+    const current=await readOptional(path);
+    if(current!==before&&current!==after)throw Error(bt('files.commit_modified'));
+  }
+  for(const [path,value] of [[record.accountPath,forward?record.afterAccount:record.beforeAccount],[record.indexPath,forward?record.afterIndex:record.beforeIndex]] as const) {
+    if(await readOptional(path)===value)continue;
+    if(value===null)await unlink(path);else await atomicText(path,value);
+  }
+}
+/** Called under the account write lease before reading the index. */
+export async function recoverAccountCommit(indexPath:string):Promise<void> {
+  const journalPath=indexPath+'.commit.json',raw=await readOptional(journalPath);if(raw===null)return;
+  const record=JSON.parse(raw) as AccountCommit;
+  if(!pathsEqual(record.indexPath, indexPath)||!pathsEqual(dirname(record.accountPath), join(dirname(indexPath),'accounts'))||!record.accountPath.endsWith('.json'))throw Error(bt('files.commit_journal_invalid'));
+  await restoreCommit(record,true);await unlink(journalPath);
+}
+/** Journal before either replacement; errors roll back, crashes are reconciled before reads. */
+export async function commitAccountAndIndex(accountPath:string,accountData:unknown,indexPath:string,indexData:unknown,signal?:AbortSignal):Promise<void> {
+  await mkdir(dirname(accountPath),{recursive:true,mode:0o700});
+  await mkdir(dirname(indexPath),{recursive:true,mode:0o700});
+  for(const target of [accountPath,indexPath]) {
+    try {const info=await lstat(target);if(!isOwnedByCurrentUser(info))throw Error(bt('files.refuse_non_user_file'));}
+    catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+  }
+  const journalPath=indexPath+'.commit.json';
+  const record:AccountCommit={accountPath,indexPath,beforeAccount:await readOptional(accountPath),beforeIndex:await readOptional(indexPath),afterAccount:JSON.stringify(accountData,null,2)+'\n',afterIndex:JSON.stringify(indexData,null,2)+'\n'};
+  signal?.throwIfAborted();await atomicJson(journalPath,record,signal);
+  try {
+    signal?.throwIfAborted();await atomicText(accountPath,record.afterAccount);await atomicText(indexPath,record.afterIndex);await unlink(journalPath);
+  } catch(error) {
+    try {await restoreCommit(record,false);await unlink(journalPath);}catch{throw Error(bt('files.commit_incomplete'));}
+    throw error;
+  }
+}
+
+
+const REDACTED_KEY = '[REDACTED_API_KEY]';
+const REDACTED_TOKEN = '[REDACTED_TOKEN]';
+const SECRET_SENTINEL = (index: number) => `\u0000${index}\u0000`;
+
+export function sanitizeError(msg: string, secrets: (string | undefined | null)[] = []): string {
+  let cleaned = String(msg ?? '');
+  const values = secrets.filter((secret): secret is string => typeof secret === 'string' && secret.length > 0);
+  const unique = [...new Set(values)].sort((a, b) => b.length - a.length);
+  unique.forEach((secret, index) => { cleaned = cleaned.split(secret).join(SECRET_SENTINEL(index)); });
+  cleaned = cleaned.replace(/\b((?:proxy-)?authorization\s*[:=]\s*)(?:bearer|basic|digest|token)\s+[^\s,;]+/gi, `$1${REDACTED_TOKEN}`);
+  cleaned = cleaned.replace(/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi, `$1 ${REDACTED_TOKEN}`);
+  cleaned = cleaned.replace(/(\bhttps?:\/\/[^/\s:@]+:)([^@\s/]+)(@)/gi, `$1${REDACTED_KEY}$3`);
+  cleaned = cleaned.replace(/\b(?:sk-[A-Za-z0-9_-]{4,}|AIza[A-Za-z0-9_-]{4,}|ya29\.[A-Za-z0-9._-]+|gh[pousr]_[A-Za-z0-9]{4,}|xox[baprs]-[A-Za-z0-9-]{4,}|AKIA[0-9A-Z]{8,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g, REDACTED_KEY);
+  cleaned = cleaned.replace(/\u0000(\d+)\u0000/g, REDACTED_KEY);
+  return cleaned.length > 300 ? `${cleaned.slice(0, 300)}...` : cleaned;
+}
