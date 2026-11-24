@@ -1,95 +1,101 @@
-# agy-usage
+<div align="center">
+  <img src="./assets/master-1024.png" width="108" height="108" alt="agy-usage 图标" />
+  <h1>agy-usage-tool</h1>
+  <p><strong>Antigravity 的本地用量面板</strong></p>
+  <p>今天用了多少 Token？哪个模型用得最多？这场对话的上下文还剩多少？</p>
+  <img src="./assets/readme-badges.svg" width="344" alt="本地运行 · Node.js 22.15+ · MIT" />
+  <p>
+    <a href="#快速安装"><strong>快速安装</strong></a> ·
+    <a href="https://github.com/laishaojue-commits/agy-usage-tool/releases">发布页</a> ·
+    <a href="#界面预览">界面预览</a> ·
+    <a href="./README_EN.md">English</a>
+  </p>
+</div>
 
-**agy-usage shows how you use Antigravity.** Open the dashboard to see how many tokens you used today, which models used the most, and how much room is left in your current conversation. You can also check context usage by subagent and see how much disk space your local cache takes up. Everything stays on your device; cost estimates are not actual charges.
+## 界面预览
 
-[简体中文文档](./README.zh-CN.md)
+<a href="./assets/screenshots/overview.png"><img src="./assets/screenshots/overview.png" width="100%" alt="总览：今日 Token、估算费用、当前对话与活跃模型" /></a>
 
-## Screenshots
+<table>
+  <tr>
+    <th width="50%">上下文还剩多少？</th>
+    <th width="50%">Token 都花在哪儿？</th>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="./assets/screenshots/context.png"><img src="./assets/screenshots/context.png" width="100%" alt="上下文面板" /></a>
+      <p>查看主对话和子智能体各自用了多少上下文、压缩过几次。</p>
+    </td>
+    <td width="50%" valign="top">
+      <a href="./assets/screenshots/usage.png"><img src="./assets/screenshots/usage.png" width="100%" alt="用量面板" /></a>
+      <p>按时间和模型看 Token、请求次数、缓存命中率和费用估算。</p>
+    </td>
+  </tr>
+</table>
 
-![Overview: daily token usage, estimated costs, and active models](./assets/screenshots/overview.png)
+## 快速安装
 
-![Context: how much context the current conversation and subagents are using](./assets/screenshots/context.png)
+**准备好 Antigravity 和 Node.js ≥ 22.15.0**，在终端运行 `node -v` 能看到版本号即可。ZIP 和源码安装都需要 Node.js。
 
-![Usage: token trends by model, estimated costs, and cache hit rate](./assets/screenshots/usage.png)
+1. 从 [Releases](https://github.com/laishaojue-commits/agy-usage-tool/releases) 下载 `agy-usage-v0.0.0.zip`。如果发布页还没有 ZIP，可以展开下方的源码安装。
+2. 解压到下面的插件目录，确保打开该目录就能看到 `plugin.json`。
 
-## Key Features
+   | 系统 | 插件目录 |
+   | --- | --- |
+   | Windows | `%USERPROFILE%\.gemini\config\plugins\agy-usage\` |
+   | macOS / Linux | `~/.gemini/config/plugins/agy-usage/` |
 
-- **Overview Dashboard**: Today's token total, estimated USD cost, request counts, an active conversation context summary card, 24-hour stacked model usage chart, and top active models.
-- **Context Window & Swarm Monitor**:
-  - Tracks current context occupancy vs. capacity (`used / capacity`) with explicit DB threshold vs. model reference indicators and compaction counts.
-  - Supports multi-model / Orchestrator planner & executor stage breakdown.
-  - Monitors Swarm / subagent members independently (running, waiting, collapsed completed members, plus combined swarm usage & cost totals).
-- **Usage & Cost Analytics**:
-  - Interactive stacked bar charts (`Tokens` / `Requests` toggle, hover tooltip with bucket + model + value) across `Today`, `7d`, `30d`, and `All`.
-  - Shared deterministic color palette linking the stacked trend chart and API Cost Donut chart.
-  - Searchable, paginated request log and built-in offline pricing catalog.
-- **Read-Only Storage Inspection**:
-  - Measures reclaimable Antigravity cache/log buckets alongside protected core data allowlists (`conversations`, `knowledge`, `brain`, etc.) with destructive mutations locked (`READ_ONLY_UNSUPPORTED`).
+3. 在 Antigravity 的插件管理页启用 **agy-usage**。启用后，在左侧栏打开 **agy-usage**，也可以通过辅助侧栏的 **+** 菜单添加。
 
-## Architecture & L0 Security Guarantees
+<details>
+<summary><strong>从源码安装</strong></summary>
 
-`agy-usage` operates strictly at **L0 (Pure Local Read-Only)**:
-
-- **34-Module Backend Allowlist**: `tools/plugin-allowlist.mjs` enforces an AST-verified graph of exactly 34 local `.js` modules with zero `fetch()`, `require()`, `eval()`, or dynamic imports.
-- **Zero Process Probing & Zero Credentials**: Never spawns PowerShell/Win32/POSIX process scanners, never reads OAuth tokens, never probes CDP ports or Named Pipes/Unix sockets, and never calls cloud quota APIs.
-- **Self-Contained Single-File MCP App UI**: Built with Vite + `@modelcontextprotocol/ext-apps` into a single HTML bundle (`ui/mcp-app.html`) with strict CSP (`connect-src 'none'`, per-build `sha256` inline script hash) and dual Antigravity entrypoints (`aux_pane` `+` menu & `global` left sidebar).
-- **Hardened Transport & File Boundaries**: `1 MiB` stdio frame cap, `assertSafeJson` prototype-pollution check, `SAFE_CONVERSATION_ID_RE` (`/^[a-zA-Z0-9_-]{4,128}$/`) input validation, `realpathSync`/`lstatSync` symlink and sidecar checks on SQLite reads, and rollback-preserving plugin installer.
-
-See [SECURITY.md](./SECURITY.md) for full details and known non-atomic SQLite/WAL read boundaries.
-
-## Installation
-
-### Option 1: Install from Release ZIP
-
-1. Download `agy-usage-v0.0.0.zip` (and verify against `SHA256SUMS.txt` if desired) from Releases.
-2. Extract its contents into a clean Antigravity plugins directory:
-   - **Windows**: `%USERPROFILE%\.gemini\config\plugins\agy-usage\`
-   - **macOS / Linux**: `~/.gemini/config/plugins/agy-usage/`
-   Ensure `plugin.json` is located directly inside `plugins/agy-usage/plugin.json`.
-3. Reload or enable **agy-usage** in Antigravity's Plugins manager.
-
-#### Manual ZIP Upgrade Steps
-
-1. **Disable** `agy-usage` in Antigravity's Plugins page first (on Windows this releases the `node.exe` directory lock).
-2. **Back up and move away or remove the entire old `plugins/agy-usage/` directory** — **never extract a new ZIP over an existing `plugins/agy-usage/` directory**, otherwise removed modules from older releases will remain on disk.
-3. **Extract** the new release ZIP into a fresh `plugins/agy-usage/` directory.
-4. **Re-enable** `agy-usage` in Antigravity's Plugins page (your personal UI preferences in `ui-prefs.json` are stored separately in the plugin data directory and will not be lost when replacing the plugin directory).
-
-### Option 2: Build & Install from Source
-
-Requires **Node.js >= 22.15.0** (for built-in `node:sqlite`).
-
-```bash
+```sh
+git clone https://github.com/laishaojue-commits/agy-usage-tool.git
+cd agy-usage-tool
 npm ci --ignore-scripts
 npm run plugin:install
 ```
 
-> **Windows Upgrade Tip**: When upgrading an already-running `agy-usage` plugin on Windows, Antigravity's active `node.exe` MCP server process may hold a directory lock on `plugins/agy-usage`. If installation reports a file lock, disable **agy-usage** in Antigravity's Plugins panel first, then run `npm run plugin:install` (which replaces the entire directory cleanly) or follow the manual ZIP replacement steps above, and re-enable it. If you still encounter a directory lock (`EPERM`/`EBUSY`) after disabling **agy-usage** in the Plugins page (because Antigravity's main process file watcher may still hold a handle on the plugin directory), **completely quit Antigravity** before running the installer or replacing the directory, then reopen Antigravity afterwards.
+安装后按上面的方式启用插件。同一插件暂存目录下，请一次只运行一个安装命令。
 
-## Development & Verification
+</details>
 
-```bash
-# Compile 34 backend TypeScript modules
-npm run build
+<details>
+<summary><strong>已安装？查看升级与 Windows 文件锁处理</strong></summary>
 
-# Build self-contained single-file MCP App UI (ui/dist-mcp/mcp-app.html)
-npm run ui:build
+1. 停用插件，把旧的整个 `plugins/agy-usage` 目录移到插件目录之外备份。
+2. 把新版解压到干净的 `plugins/agy-usage` 目录，再重新启用。不要覆盖解压，否则旧文件会留在磁盘上。
+3. Windows 如果仍报目录被占用，完全退出 Antigravity，替换完成后再打开。
 
-# Assemble & verify standalone plugin bundle (artifacts/agy-usage/)
-npm run plugin:build
+界面偏好保存在独立的插件数据目录，不需要随程序目录一起移动。
 
-# Package deterministic cross-platform release archive (artifacts/agy-usage-v0.0.0.zip + SHA256SUMS.txt)
-npm run plugin:zip
+</details>
 
-# Run all cross-platform tests (0 skipped)
+## 面板里还能看什么
+
+- **用量明细**：按今天、近 7 天、近 30 天或全部切换，搜索单次请求，看看各模型用了多少。
+- **协作用量**：区分规划和执行阶段，分开看子智能体的上下文，用量则可以看整场协作的合计。
+- **存储体检**：看看缓存和日志占了多少空间，只展示，不替你清理文件。
+
+> 统计在本机完成，不读取账号凭据，也不上报用量。截图中的金额是参考价格换算，不是实际账单。实现细节见 [SECURITY.md](./SECURITY.md)。
+
+## 开发与许可
+
+<details>
+<summary><strong>构建、测试和打包</strong></summary>
+
+```sh
+npm ci --ignore-scripts
+npm --prefix ui ci --ignore-scripts
+npm --prefix plugin ci --omit=dev --ignore-scripts
 npm test
-
-# Run privacy & PII gate across source + build artifacts
+npm run plugin:zip -- --rebuild
 npm run check:privacy -- --include-build
 ```
 
-## License & Attribution
+ZIP 和校验文件生成在 `artifacts/`。
 
-Released under the [MIT License](./LICENSE) (`Copyright (c) 2026 Enzoo404`).
+</details>
 
-`agy-usage` is built upon and gratefully acknowledges the upstream project **[Enzoo404/gravitybox](https://github.com/Enzoo404/gravitybox)** (`v1.1.3`, MIT License) for its local SQLite usage ledger scanner, conversation HUD context telemetry, model catalog, and pricing engine. See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for full notices.
+[MIT 许可](./LICENSE)（Copyright © 2026 Enzoo404）。感谢上游 [Enzoo404/gravitybox](https://github.com/Enzoo404/gravitybox)（`v1.1.3`）提供本地用量、上下文与定价模块。详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。

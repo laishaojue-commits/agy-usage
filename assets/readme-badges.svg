@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="344" height="28" viewBox="0 0 344 28" role="img" aria-label="On-device, Node.js 22.15+, MIT">
+  <rect x="0" y="2" width="110" height="24" rx="12" fill="#075985"/>
+  <rect x="118" y="2" width="154" height="24" rx="12" fill="#334155"/>
+  <rect x="280" y="2" width="64" height="24" rx="12" fill="#047857"/>
+  <g fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">
+    <text x="55" y="18">ON-DEVICE</text>
+    <text x="195" y="18">NODE.JS 22.15+</text>
+    <text x="312" y="18">MIT</text>
+  </g>
+</svg>
