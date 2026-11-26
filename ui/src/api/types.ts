@@ -22,7 +22,6 @@ export interface StatusSnapshot {
   updatedAt?: string;
   pid?: number;
   locale?: string;
-  configuredLanguage?: string;
   readOnlyMode?: boolean;
   platform?: string;
   pricingRevision?: string;

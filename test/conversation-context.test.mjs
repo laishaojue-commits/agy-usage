@@ -49,7 +49,32 @@ function encodeStepMeta({ sec, usage, toolCallName }) {
   return Buffer.concat(parts);
 }
 
-function encodeGenMeta({ model, maxContextTokens, stepIndices, usage, sec }) {
+function encodeExecutorMeta({ planModelEnum, executionModelEnum, plannerModelName, maxTokenLimit }) {
+  const plannerParts = [];
+  if (planModelEnum) plannerParts.push(W.encodeVarintField(1, planModelEnum));
+  if (plannerModelName) plannerParts.push(W.encodeString(28, plannerModelName));
+  if (executionModelEnum) {
+    plannerParts.push(W.encodeLengthDelimited(60, W.encodeVarintField(1, executionModelEnum)));
+  }
+  const cascadeParts = [W.encodeLengthDelimited(1, Buffer.concat(plannerParts))];
+  if (maxTokenLimit) {
+    cascadeParts.push(W.encodeLengthDelimited(2, W.encodeVarintField(5, maxTokenLimit)));
+  }
+  return W.encodeLengthDelimited(10, Buffer.concat(cascadeParts));
+}
+
+function encodeGenMeta({
+  model,
+  modelEnum,
+  modelDisplayName,
+  planModelEnum,
+  executionModelEnum,
+  plannerModelName,
+  maxContextTokens,
+  stepIndices,
+  usage,
+  sec,
+}) {
   const ctxMetaParts = [];
   if (maxContextTokens) {
     ctxMetaParts.push(W.encodeVarintField(4, maxContextTokens));
@@ -65,22 +90,33 @@ function encodeGenMeta({ model, maxContextTokens, stepIndices, usage, sec }) {
     : W.encodeLengthDelimited(9, encodeTimestamp(4, sec));
 
   const chatModelParts = [
-    W.encodeString(19, model),
+    ...(modelEnum ? [W.encodeVarintField(3, modelEnum)] : []),
+    ...(usage
+      ? [
+          W.encodeLengthDelimited(
+            4,
+            encodeModelUsage(usage.rawIn, usage.cachedRead, usage.cacheWrite ?? 0, usage.out)
+          ),
+        ]
+      : []),
+    ...(model ? [W.encodeString(19, model)] : []),
+    ...(modelDisplayName ? [W.encodeString(21, modelDisplayName)] : []),
     chatStart,
   ];
   const rootParts = [
     W.encodeLengthDelimited(1, Buffer.concat(chatModelParts)),
   ];
-  if (usage) {
-    rootParts.push(
-      W.encodeLengthDelimited(
-        4,
-        encodeModelUsage(usage.rawIn, usage.cachedRead, usage.cacheWrite ?? 0, usage.out)
-      )
-    );
+  if (planModelEnum || executionModelEnum || plannerModelName) {
+    const plannerParts = [];
+    if (planModelEnum) plannerParts.push(W.encodeVarintField(1, planModelEnum));
+    if (plannerModelName) plannerParts.push(W.encodeString(28, plannerModelName));
+    if (executionModelEnum) {
+      plannerParts.push(W.encodeLengthDelimited(60, W.encodeVarintField(1, executionModelEnum)));
+    }
+    rootParts.push(W.encodeLengthDelimited(3, Buffer.concat(plannerParts)));
   }
   for (const idx of stepIndices ?? []) {
-    rootParts.push(W.encodeVarintField(14, idx));
+    rootParts.push(W.encodeVarintField(2, idx));
   }
   return Buffer.concat(rootParts);
 }
@@ -92,6 +128,7 @@ function createConvDb(dbPath, opts) {
       PRAGMA journal_mode = WAL;
       CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER NOT NULL, status INTEGER NOT NULL, metadata BLOB);
       CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);
+      CREATE TABLE executor_metadata (idx INTEGER PRIMARY KEY, data BLOB);
       CREATE TABLE trajectory_meta (trajectory_id TEXT PRIMARY KEY, cascade_id TEXT, trajectory_type INTEGER);
     `);
     db.prepare('INSERT INTO trajectory_meta VALUES (?, ?, 0)').run(opts.id, opts.id);
@@ -102,6 +139,10 @@ function createConvDb(dbPath, opts) {
     const insGen = db.prepare('INSERT INTO gen_metadata (idx, data) VALUES (?, ?)');
     for (const g of opts.gens ?? []) {
       insGen.run(g.idx, g.data);
+    }
+    const insExec = db.prepare('INSERT INTO executor_metadata (idx, data) VALUES (?, ?)');
+    for (const e of opts.executorMetas ?? []) {
+      insExec.run(e.idx, e.data);
     }
   } finally {
     db.close();
@@ -595,21 +636,21 @@ test('MCP Server context_conversations_list, context_conversation_detail, and co
   client.notify('notifications/initialized', {});
 
   const tools = await client.request('tools/list', {});
-  const openTool = tools.tools.find((tool) => tool.name === 'open_agy_usage');
+  const openTool = tools.tools.find((tool) => tool.name === 'open_agy_usage_tool');
   assert.deepEqual(openTool.inputSchema.properties.view.enum, [
     'overview', 'context', 'usage', 'storage', 'settings', 'about',
   ]);
   assert.equal(openTool.inputSchema.properties.conversationId.type, 'string');
 
   const openCtx = await client.request('tools/call', {
-    name: 'open_agy_usage',
+    name: 'open_agy_usage_tool',
     arguments: { view: 'context', conversationId: ids.mainCompletedId },
   });
   assert.equal(openCtx.structuredContent.initialView, 'context');
   assert.equal(openCtx.structuredContent.initialConversationId, ids.mainCompletedId);
 
   const listRes = await client.request('tools/call', {
-    name: 'agy_usage_ipc',
+    name: 'agy_usage_tool_ipc',
     arguments: { payload: { command: 'context_conversations_list' } },
   });
   const listData = listRes.structuredContent;
@@ -618,7 +659,7 @@ test('MCP Server context_conversations_list, context_conversation_detail, and co
   assert.equal(listData.conversations.length, 2);
 
   const detailRes = await client.request('tools/call', {
-    name: 'agy_usage_ipc',
+    name: 'agy_usage_tool_ipc',
     arguments: { payload: { command: 'context_conversation_detail', conversationId: ids.mainSwarmId } },
   });
   const detailData = detailRes.structuredContent;
@@ -648,7 +689,6 @@ test('UI context cards, K/M formatting, Swarm collapse, and overview compact car
   const snapshot = await service.getConversationContextSnapshot(ids.mainSwarmId);
 
   const ui = await bundleContextFrontendModules(sandbox);
-  ui.setLocalePreference('zh-Hans');
 
   const fullCard = ui.renderContextWindowCard(snapshot, { compact: false });
   assert.equal(fullCard.includes('万'), false);
@@ -737,12 +777,309 @@ test('UI context cards, K/M formatting, Swarm collapse, and overview compact car
   assert.ok(overviewHtml.includes('data-nav="context"'));
   assert.ok(overviewHtml.includes('319K'));
   assert.ok(overviewHtml.includes('92.5%'));
+});
 
-  ui.setLocalePreference('en');
-  const enCard = ui.renderContextWindowCard(snapshot, { compact: false });
-  assert.ok(enCard.includes('Context Capacity'));
-  assert.ok(enCard.includes('Average Cache Hit Rate'));
-  assert.ok(enCard.includes('319K'));
-  assert.ok(enCard.includes('160%'));
-  assert.equal(enCard.includes('万'), false);
+test('Orchestrator folds multi-row executor_metadata, tracks exit_plan_mode, and avoids phantom dash row', { timeout: 30000 }, async (t) => {
+  const sandbox = await mkdtemp(join(tmpdir(), 'agy-orch-fix-'));
+  const geminiDir = join(sandbox, 'gemini');
+  const stateDir = join(sandbox, 'state');
+  const convDir = join(geminiDir, 'antigravity', 'conversations');
+  await mkdir(convDir, { recursive: true });
+  await mkdir(stateDir, { recursive: true });
+
+  t.after(async () => {
+    await rm(sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  });
+
+  const baseSec = Math.floor(Date.now() / 1000) - 300;
+  const seedId = '11111111-1111-4111-8111-111111111111';
+  const orchId = '22222222-2222-4222-8222-222222222222';
+  const planningKnownId = '33333333-3333-4333-8333-333333333333';
+  const planningUnknownId = '44444444-4444-4444-8444-444444444444';
+
+  // Seed DB teaches enum 1528 -> Gemini 4 Hydrogen (XHigh) across the scan
+  createConvDb(join(convDir, `${seedId}.db`), {
+    id: seedId,
+    steps: [
+      { idx: 0, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec - 120, usage: { rawIn: 1000, cachedRead: 0, out: 100 } }) },
+    ],
+    gens: [
+      {
+        idx: 0,
+        data: encodeGenMeta({
+          model: 'gemini-4-hydrogen',
+          modelEnum: 1528,
+          modelDisplayName: 'Gemini 4 Hydrogen (XHigh)',
+          maxContextTokens: 512_000,
+          stepIndices: [0],
+          usage: { rawIn: 1000, cachedRead: 0, out: 100 },
+          sec: baseSec - 120,
+        }),
+      },
+    ],
+  });
+
+  // Case 1: Plan & Execute after exit_plan_mode where later executor_metadata row overwrote planModelEnum 1427 -> 1528
+  createConvDb(join(convDir, `${orchId}.db`), {
+    id: orchId,
+    executorMetas: [
+      { idx: 0, data: encodeExecutorMeta({ planModelEnum: 1427, executionModelEnum: 1528, maxTokenLimit: 512_000 }) },
+      { idx: 1, data: encodeExecutorMeta({ planModelEnum: 1528, executionModelEnum: 1528, maxTokenLimit: 512_000 }) },
+    ],
+    steps: [
+      { idx: 0, stepType: 14, status: 3, metadata: encodeStepMeta({ sec: baseSec + 5 }) },
+      { idx: 1, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec + 10, usage: { rawIn: 40_900, cachedRead: 0, out: 500 } }) },
+      { idx: 2, stepType: 132, status: 3, metadata: encodeStepMeta({ sec: baseSec + 20, toolCallName: 'exit_plan_mode' }) },
+      { idx: 3, stepType: 15, status: 2, metadata: encodeStepMeta({ sec: baseSec + 30, usage: { rawIn: 3_040, cachedRead: 96_200, out: 234 } }) },
+    ],
+    gens: [
+      {
+        idx: 0,
+        data: encodeGenMeta({
+          model: 'gemini-4-carbon',
+          modelEnum: 1427,
+          modelDisplayName: 'Gemini 4 Carbon (High)',
+          planModelEnum: 1427,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [1],
+          usage: { rawIn: 40_900, cachedRead: 0, out: 500 },
+          sec: baseSec + 10,
+        }),
+      },
+      {
+        idx: 1,
+        data: encodeGenMeta({
+          model: 'gemini-4-hydrogen',
+          modelEnum: 1528,
+          modelDisplayName: 'Gemini 4 Hydrogen (XHigh)',
+          planModelEnum: 1528,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [3],
+          usage: { rawIn: 3_040, cachedRead: 96_200, out: 234 },
+          sec: baseSec + 30,
+        }),
+      },
+    ],
+  });
+
+  // Case 2: Still in planning phase, executor enum 1528 known via local enum self-learning -> resolved Hydrogen [执行] [待介入]
+  createConvDb(join(convDir, `${planningKnownId}.db`), {
+    id: planningKnownId,
+    executorMetas: [
+      { idx: 0, data: encodeExecutorMeta({ planModelEnum: 1427, executionModelEnum: 1528, maxTokenLimit: 512_000 }) },
+    ],
+    steps: [
+      { idx: 0, stepType: 14, status: 3, metadata: encodeStepMeta({ sec: baseSec + 35 }) },
+      { idx: 1, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec + 40, usage: { rawIn: 12_000, cachedRead: 0, out: 200 } }) },
+    ],
+    gens: [
+      {
+        idx: 0,
+        data: encodeGenMeta({
+          model: 'gemini-4-carbon',
+          modelEnum: 1427,
+          modelDisplayName: 'Gemini 4 Carbon (High)',
+          planModelEnum: 1427,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [1],
+          usage: { rawIn: 12_000, cachedRead: 0, out: 200 },
+          sec: baseSec + 40,
+        }),
+      },
+    ],
+  });
+
+  // Case 3: Still in planning phase with unseen future enum 999999 -> pending label instead of "—"
+  createConvDb(join(convDir, `${planningUnknownId}.db`), {
+    id: planningUnknownId,
+    executorMetas: [
+      { idx: 0, data: encodeExecutorMeta({ planModelEnum: 1427, executionModelEnum: 999999, maxTokenLimit: 512_000 }) },
+    ],
+    steps: [
+      { idx: 0, stepType: 14, status: 3, metadata: encodeStepMeta({ sec: baseSec + 45 }) },
+      { idx: 1, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec + 50, usage: { rawIn: 8_000, cachedRead: 0, out: 150 } }) },
+    ],
+    gens: [
+      {
+        idx: 0,
+        data: encodeGenMeta({
+          model: 'gemini-4-carbon',
+          modelEnum: 1427,
+          modelDisplayName: 'Gemini 4 Carbon (High)',
+          planModelEnum: 1427,
+          executionModelEnum: 999999,
+          maxContextTokens: 512_000,
+          stepIndices: [1],
+          usage: { rawIn: 8_000, cachedRead: 0, out: 150 },
+          sec: baseSec + 50,
+        }),
+      },
+    ],
+  });
+
+  const service = new ConversationContextService({ geminiDir, stateDir });
+  await service.listRecentConversations();
+  const ui = await bundleContextFrontendModules(sandbox);
+
+  const orchSnap = await service.getConversationContextSnapshot(orchId);
+  assert.equal(orchSnap.main.isOrchestrator, true);
+  assert.equal(orchSnap.main.modelStages?.length, 2);
+  assert.equal(orchSnap.main.modelStages[0].role, 'planner');
+  assert.ok(orchSnap.main.modelStages[0].modelDisplayName.includes('Carbon'));
+  assert.equal(orchSnap.main.modelStages[1].role, 'executor');
+  assert.equal(orchSnap.main.modelStages[1].isActive, true);
+  assert.ok(orchSnap.main.modelStages[1].modelDisplayName.includes('Hydrogen'));
+  const orchStagesCard = ui.renderModelStagesCard(orchSnap);
+  assert.equal(orchStagesCard.includes('—'), false);
+  assert.ok(orchStagesCard.includes('规划'));
+  assert.ok(orchStagesCard.includes('执行'));
+  assert.ok(orchStagesCard.includes('当前'));
+
+  const knownSnap = await service.getConversationContextSnapshot(planningKnownId);
+  assert.equal(knownSnap.main.modelStages?.length, 2);
+  assert.equal(knownSnap.main.modelStages[0].role, 'planner');
+  assert.equal(knownSnap.main.modelStages[0].isActive, true);
+  assert.equal(knownSnap.main.modelStages[1].role, 'executor');
+  assert.equal(knownSnap.main.modelStages[1].hasUsageData, false);
+  assert.ok(knownSnap.main.modelStages[1].modelDisplayName.includes('Hydrogen'));
+  const knownStagesCard = ui.renderModelStagesCard(knownSnap);
+  assert.ok(knownStagesCard.includes('待介入'));
+  assert.equal(knownStagesCard.includes('—'), false);
+
+  const unknownSnap = await service.getConversationContextSnapshot(planningUnknownId);
+  assert.equal(unknownSnap.main.modelStages?.length, 2);
+  assert.equal(unknownSnap.main.modelStages[1].modelId, 'pending');
+  const unknownStagesCard = ui.renderModelStagesCard(unknownSnap);
+  assert.ok(unknownStagesCard.includes('待切换执行模型'));
+  assert.equal(unknownStagesCard.includes('—'), false);
+
+  // Case 4: Same-model Planner & Executor (1528 === 1528) across Turn 1 Plan->Exit->Execute and Turn 2 Continuation
+  const sameModelId = '55555555-5555-4555-8555-555555555555';
+  createConvDb(join(convDir, `${sameModelId}.db`), {
+    id: sameModelId,
+    executorMetas: [
+      { idx: 0, data: encodeExecutorMeta({ planModelEnum: 1528, executionModelEnum: 1528, maxTokenLimit: 512_000 }) },
+    ],
+    steps: [
+      { idx: 0, stepType: 14, status: 3, metadata: encodeStepMeta({ sec: baseSec + 60 }) },
+      { idx: 1, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec + 65, usage: { rawIn: 30_000, cachedRead: 0, out: 300 } }) },
+      { idx: 2, stepType: 132, status: 3, metadata: encodeStepMeta({ sec: baseSec + 70, toolCallName: 'exit_plan_mode' }) },
+      { idx: 3, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec + 75, usage: { rawIn: 55_000, cachedRead: 0, out: 400 } }) },
+      { idx: 4, stepType: 14, status: 3, metadata: encodeStepMeta({ sec: baseSec + 80 }) },
+      { idx: 5, stepType: 15, status: 2, metadata: encodeStepMeta({ sec: baseSec + 85, usage: { rawIn: 2_000, cachedRead: 60_000, out: 250 } }) },
+    ],
+    gens: [
+      {
+        idx: 0,
+        data: encodeGenMeta({
+          model: 'gemini-4-hydrogen',
+          modelEnum: 1528,
+          modelDisplayName: 'Gemini 4 Hydrogen (XHigh)',
+          planModelEnum: 1528,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [1],
+          usage: { rawIn: 30_000, cachedRead: 0, out: 300 },
+          sec: baseSec + 65,
+        }),
+      },
+      {
+        idx: 1,
+        data: encodeGenMeta({
+          model: 'gemini-4-hydrogen',
+          modelEnum: 1528,
+          modelDisplayName: 'Gemini 4 Hydrogen (XHigh)',
+          planModelEnum: 1528,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [3],
+          usage: { rawIn: 55_000, cachedRead: 0, out: 400 },
+          sec: baseSec + 75,
+        }),
+      },
+      {
+        idx: 2,
+        data: encodeGenMeta({
+          model: 'gemini-4-hydrogen',
+          modelEnum: 1528,
+          modelDisplayName: 'Gemini 4 Hydrogen (XHigh)',
+          planModelEnum: 1528,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [5],
+          usage: { rawIn: 2_000, cachedRead: 60_000, out: 250 },
+          sec: baseSec + 85,
+        }),
+      },
+    ],
+  });
+  const sameSnap = await service.getConversationContextSnapshot(sameModelId);
+  assert.equal(sameSnap.main.isOrchestrator, true);
+  assert.equal(sameSnap.main.modelStages?.length, 2);
+  assert.equal(sameSnap.main.modelStages[0].role, 'planner');
+  assert.equal(sameSnap.main.modelStages[0].hasUsageData, true);
+  assert.equal(sameSnap.main.modelStages[1].role, 'executor');
+  assert.equal(sameSnap.main.modelStages[1].isActive, true);
+  assert.ok(sameSnap.main.modelStages[1].usedTokens >= 60_000);
+  const sameStagesCard = ui.renderModelStagesCard(sameSnap);
+  assert.equal(sameStagesCard.includes('待介入'), false);
+
+  // Case 5: Rejected exit_plan_mode (status 7) must not flip planner steps into executor role
+  const rejectedExitId = '66666666-6666-4666-8666-666666666666';
+  createConvDb(join(convDir, `${rejectedExitId}.db`), {
+    id: rejectedExitId,
+    executorMetas: [
+      { idx: 0, data: encodeExecutorMeta({ planModelEnum: 1427, executionModelEnum: 1528, maxTokenLimit: 512_000 }) },
+    ],
+    steps: [
+      { idx: 0, stepType: 14, status: 3, metadata: encodeStepMeta({ sec: baseSec + 90 }) },
+      { idx: 1, stepType: 132, status: 7, metadata: encodeStepMeta({ sec: baseSec + 95, toolCallName: 'exit_plan_mode' }) },
+      { idx: 2, stepType: 15, status: 3, metadata: encodeStepMeta({ sec: baseSec + 100, usage: { rawIn: 20_000, cachedRead: 0, out: 200 } }) },
+    ],
+    gens: [
+      {
+        idx: 0,
+        data: encodeGenMeta({
+          model: 'gemini-4-carbon',
+          modelEnum: 1427,
+          modelDisplayName: 'Gemini 4 Carbon (High)',
+          planModelEnum: 1427,
+          executionModelEnum: 1528,
+          maxContextTokens: 512_000,
+          stepIndices: [2],
+          usage: { rawIn: 20_000, cachedRead: 0, out: 200 },
+          sec: baseSec + 100,
+        }),
+      },
+    ],
+  });
+  const rejectedSnap = await service.getConversationContextSnapshot(rejectedExitId);
+  assert.equal(rejectedSnap.main.modelStages?.length, 2);
+  assert.equal(rejectedSnap.main.modelStages[0].role, 'planner');
+  assert.equal(rejectedSnap.main.modelStages[0].isActive, true);
+  assert.equal(rejectedSnap.main.modelStages[1].role, 'executor');
+  assert.equal(rejectedSnap.main.modelStages[1].hasUsageData, false);
+
+  // Case 6: Unknown modelId fallback renders "未知模型" rather than "—"
+  const unknownSlotCard = ui.renderModelStagesCard({
+    ...orchSnap,
+    main: {
+      ...orchSnap.main,
+      modelStages: [
+        orchSnap.main.modelStages[0],
+        {
+          ...orchSnap.main.modelStages[1],
+          role: 'model',
+          modelId: 'unknown',
+          modelDisplayName: '—',
+          shortLabel: '',
+        },
+      ],
+    },
+  });
+  assert.ok(unknownSlotCard.includes('未知模型'));
+  assert.equal(unknownSlotCard.includes('—'), false);
 });

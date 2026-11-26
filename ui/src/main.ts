@@ -21,7 +21,7 @@ import type {
   UsagePeriodKey,
   UsagePeriodResponse,
 } from './api/types';
-import { getLocale, setLocalePreference, t } from './i18n/l10n';
+import { t } from './i18n/l10n';
 import {
   getUiCapabilities,
   resolveAllowedView,
@@ -43,7 +43,6 @@ import { renderStorageView } from './views/storage';
 import { renderUsageView } from './views/usage';
 
 interface UiPrefsPayload {
-  language?: string;
   theme?: ThemePreference;
 }
 
@@ -259,9 +258,6 @@ function applyUiPrefs(prefs: UiPrefsPayload | null | undefined) {
     state.theme = prefs.theme;
     applyTheme(state.theme);
   }
-  if (typeof prefs.language === 'string' && prefs.language.trim()) {
-    setLocalePreference(prefs.language);
-  }
 }
 
 async function releaseUsageSnapshot() {
@@ -281,24 +277,12 @@ async function loadStatusAndRuntime() {
     if (st.ok && st.status) {
       state.status = st.status;
       state.serviceError = null;
-      const targetLang = st.status.configuredLanguage || st.status.locale;
-      if (targetLang && resolveLocaleMismatch(targetLang)) {
-        setLocalePreference(targetLang);
-      }
     } else if (st.error) {
       state.serviceError = st.error;
     }
   } catch (err) {
     state.serviceError = err instanceof Error ? err.message : t('win.common.service_offline');
   }
-}
-
-function resolveLocaleMismatch(targetConfigured: string): boolean {
-  const next = targetConfigured.toLowerCase();
-  const cur = getLocale().toLowerCase();
-  if (next === 'en' || next.startsWith('en-')) return cur !== 'en';
-  if (next.startsWith('zh')) return cur !== 'zh-hans';
-  return false;
 }
 
 async function loadDashboard() {
@@ -347,13 +331,38 @@ function computeContextFingerprint(
           status: snapshot.status,
           lastActiveAt: snapshot.lastActiveAt,
           steps: snapshot.steps,
+          hasUsage: snapshot.main.hasUsageData,
+          modelId: snapshot.main.modelId,
+          modelDisplayName: snapshot.main.modelDisplayName,
+          capSource: snapshot.main.capacitySource,
+          isOrchestrator: Boolean(snapshot.main.isOrchestrator),
+          stages: (snapshot.main.modelStages ?? []).map(
+            (s) =>
+              `${s.slotKey}:${s.role}:${s.modelId}:${s.modelDisplayName}:${s.shortLabel}:${s.hasUsageData}:${s.isActive}:${s.usedTokens}:${s.capacityTokens}:${s.capacitySource}:${s.compactionCount ?? 0}`
+          ),
           used: snapshot.main.usedTokens,
+          peak: snapshot.main.peakContextTokens,
           cap: snapshot.main.capacityTokens,
           hit: snapshot.main.averageCacheHitRate,
+          latestHit: snapshot.main.latestStepCacheHitRate,
           comp: snapshot.main.compactionCount,
+          breakdown: [
+            snapshot.main.breakdown.cachedContextTokens,
+            snapshot.main.breakdown.uncachedContextTokens,
+            snapshot.main.breakdown.latestOutputTokens,
+          ],
+          mainTokens: [
+            snapshot.mainTokens?.totalTokens ?? 0,
+            snapshot.mainTokens?.estimatedCostUsd ?? 0,
+          ],
+          swarmTotals: [
+            snapshot.swarmTotals?.memberCount ?? 0,
+            snapshot.swarmTotals?.totalTokens ?? 0,
+            snapshot.swarmTotals?.estimatedCostUsd ?? 0,
+          ],
           members: snapshot.members.map(
             (m) =>
-              `${m.conversationId}:${m.status}:${m.lastActiveAt}:${m.steps}:${m.context.usedTokens}:${m.compactionCount}`
+              `${m.conversationId}:${m.status}:${m.killed}:${m.lastActiveAt}:${m.steps}:${m.context.modelId}:${m.context.capacitySource}:${m.context.usedTokens}:${m.compactionCount}:${m.tokens.totalTokens}`
           ),
         }
       : null,
@@ -456,13 +465,11 @@ async function navigateTo(requestedView: ViewId | string) {
 
 async function pollStatusSync() {
   const prevFingerprint = computeStatusFingerprint(state.status, state.serviceError);
-  const prevLocale = getLocale();
   await loadStatusAndRuntime();
   const nextFingerprint = computeStatusFingerprint(state.status, state.serviceError);
   if (prevFingerprint === nextFingerprint) return;
 
-  const localeChanged = getLocale() !== prevLocale;
-  const shouldPatchMain = localeChanged || STATUS_SENSITIVE_VIEWS.has(state.activeView);
+  const shouldPatchMain = STATUS_SENSITIVE_VIEWS.has(state.activeView);
   scheduleRender({
     sidebar: true,
     serviceAlert: true,
@@ -589,7 +596,7 @@ async function handleAction(action: string) {
 
   if (action === 'copy-diagnostics') {
     const diag = {
-      appVersion: state.runtimeInfo?.appVersion || '0.0.0',
+      appVersion: state.runtimeInfo?.appVersion || '0.1.0',
       mode: uiCapabilities.mode,
       platform: state.status?.platform || state.runtimeInfo?.platform || 'unknown',
       readOnlyMode: state.status?.readOnlyMode ?? state.runtimeInfo?.readOnlyMode ?? true,
@@ -757,20 +764,6 @@ function attachEvents() {
       });
       return;
     }
-    if ('settingLanguage' in target.dataset) {
-      const lang = target.value;
-      setLocalePreference(lang);
-      const sysLocales = typeof navigator !== 'undefined' && navigator.languages?.length
-        ? [...navigator.languages]
-        : [navigator.language || 'en-US'];
-      void ipcCall({ command: 'language_set', language: lang, systemLocales: sysLocales })
-        .then(async (res) => {
-          if (res.ok && res.status) state.status = res.status as StatusSnapshot;
-          await ipcCall({ command: 'ui_prefs_set', language: lang }).catch(() => {});
-          return refreshCurrentView(false);
-        });
-      return;
-    }
     if ('settingTheme' in target.dataset) {
       state.theme = target.value as ThemePreference;
       applyTheme(state.theme);
@@ -829,7 +822,6 @@ function attachEvents() {
 
 async function bootstrap() {
   applyTheme(state.theme);
-  setLocalePreference('system');
   attachEvents();
   flushRender({ sidebar: true, serviceAlert: true, main: true, toasts: true, resetScroll: true });
 
@@ -838,7 +830,7 @@ async function bootstrap() {
     let switchedByToolResult = false;
     let toolResultDelivered = false;
     try {
-      const hostInfo = await initMcpAppBridge({
+      await initMcpAppBridge({
         onToolInput: (args) => {
           const requestedConvId =
             typeof args.conversationId === 'string' && args.conversationId.trim()
@@ -909,9 +901,6 @@ async function bootstrap() {
           }
         },
       });
-      if (hostInfo?.locale && !toolResultDelivered) {
-        setLocalePreference(hostInfo.locale);
-      }
       if (!toolResultDelivered) {
         const prefsRes = await ipcCall<{ ok: boolean; prefs?: UiPrefsPayload }>({ command: 'ui_prefs_get' }).catch(() => null);
         if (prefsRes?.ok && prefsRes.prefs) {

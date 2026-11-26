@@ -1,12 +1,12 @@
 # Third-Party Notices and Attribution
 
-`agy-usage` is a standalone, pure local read-only MCP App plugin extracted and refactored from **GravityBox** under the MIT License.
+`agy-usage-tool` is a standalone, pure local read-only MCP App plugin extracted and refactored from **GravityBox** under the MIT License.
 
 ## 1. Upstream Project Attribution
 
 - **Project**: `Enzoo404/gravitybox` (`v1.1.3`)
 - **License**: MIT License (`Copyright (c) 2026 Enzoo404`)
-- **Scope Used**: L0 pure local read-only SQLite usage scanner, conversation context & Swarm watermark engine, model catalog and built-in pricing engine, read-only storage inspection catalog, bilingual UI packs, and MCP App dashboard components.
+- **Scope Used**: L0 pure local read-only SQLite usage scanner, conversation context & Swarm watermark engine, model catalog and built-in pricing engine, read-only storage inspection catalog, Simplified Chinese localization pack, and MCP App dashboard components.
 
 ## 2. Model Brand Icons & Trademarks
 
@@ -15,7 +15,7 @@
 - **Claude** is a trademark or registered trademark of Anthropic PBC.
 - **OpenAI** and **GPT** are trademarks or registered trademarks of OpenAI Inc.
 
-**Trademark Disclaimer**: `agy-usage` is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Google LLC, Anthropic PBC, or OpenAI Inc. Brand names and model icons are used solely for technical identification and compatibility reference (nominative fair use).
+**Trademark Disclaimer**: `agy-usage-tool` is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Google LLC, Anthropic PBC, or OpenAI Inc. Brand names and model icons are used solely for technical identification and compatibility reference (nominative fair use).
 
 ## 3. Open-Source Runtime & Build Dependencies
 

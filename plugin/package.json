@@ -1,9 +1,9 @@
 {
-  "name": "agy-usage",
-  "version": "0.0.0",
+  "name": "agy-usage-tool",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "agy-usage MCP App Server for Antigravity",
+  "description": "agy-usage-tool MCP App Server for Antigravity",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2"
   }

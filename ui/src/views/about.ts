@@ -11,7 +11,7 @@ export function renderAboutView(state: {
 }): string {
   const { status, runtimeInfo, pingLatencyMs } = state;
   const capabilities = state.capabilities ?? getUiCapabilities('mcp-app');
-  const version = runtimeInfo?.appVersion || '0.0.0';
+  const version = runtimeInfo?.appVersion || '0.1.0';
   const pipeOk = Boolean(status);
   const readOnly = status?.readOnlyMode ?? runtimeInfo?.readOnlyMode ?? true;
   const brandTitle = capabilities.brandTitle;

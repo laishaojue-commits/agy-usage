@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "agy-usage": {
+    "agy-usage-tool": {
       "command": "node",
       "args": [
         "${PLUGIN_ROOT}/bin/server.mjs",

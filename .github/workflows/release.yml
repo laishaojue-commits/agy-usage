@@ -64,9 +64,9 @@ jobs:
         shell: bash
         run: |
           VERSION="${RELEASE_TAG#v}"
-          ZIP_PATH="artifacts/agy-usage-v${VERSION}.zip"
+          ZIP_PATH="artifacts/agy-usage-tool-v${VERSION}.zip"
           SUMS_PATH="artifacts/SHA256SUMS.txt"
           gh release create "$RELEASE_TAG" "$ZIP_PATH" "$SUMS_PATH" \
             --verify-tag \
-            --title "agy-usage $RELEASE_TAG" \
+            --title "agy-usage-tool $RELEASE_TAG" \
             --generate-notes

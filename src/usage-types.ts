@@ -438,6 +438,10 @@ export function resolveDatabaseModelFullName(
     }
     const dynamicOrchestrator = resolveDynamicOrchestratorModel(strippedId, cleanLabel, options?.siblingModelIds);
     if (dynamicOrchestrator) return dynamicOrchestrator;
+    if (!strippedId && modelEnum && modelEnum > 1000) {
+      const placeholderAlias = getEffectiveModelPriceAlias(`MODEL_PLACEHOLDER_M${modelEnum - 1000}`);
+      if (placeholderAlias) return placeholderAlias;
+    }
     // If cleanLabel names an unrecognized model (e.g. "Orchestrator (Opus)" or a new unpriced model),
     // do NOT fall through to legacy bare gemini-pro-orchestrator -> gemini-4-argon alias!
     if (isLegacyAmbiguousOrchestratorId && cleanLabel && !/^orchestrator$/i.test(cleanLabel)) {

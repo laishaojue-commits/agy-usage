@@ -1,6 +1,6 @@
 {
-  "name": "agy-usage",
-  "version": "0.0.0",
+  "name": "agy-usage-tool",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Pure local, read-only Antigravity MCP App plugin for token/cost usage analytics, conversation context & Swarm monitoring, and storage inspection",

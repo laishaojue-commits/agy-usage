@@ -237,7 +237,11 @@ import {
   resolveObservedModelSpecByEnum,
   stripOrchestratorWrapper,
 } from './model-catalog.js';
-import { resetAndRegisterRemoteModelMetadata } from '../model-catalog.js';
+import {
+  registerObservedIdeModels,
+  resetAndRegisterRemoteModelMetadata,
+  type ObservedIdeModelEntry,
+} from '../model-catalog.js';
 import {
   DEFAULT_API_PRICES,
   isTemporalPricingEntry,
@@ -279,6 +283,8 @@ const SUBAGENT_WAITING_TOOL_NAMES = new Set([
   'swarm_wait',
   'default_api:swarm_wait',
 ]);
+const EXIT_PLAN_MODE_TOOL_RE = /^(?:default_api:)?exit_plan_mode$/i;
+const ENTER_PLAN_MODE_TOOL_RE = /^(?:default_api:)?enter_plan_mode$/i;
 
 function isWaitingSubagentToolName(toolCallName: string | undefined): boolean {
   if (!toolCallName) return false;
@@ -1091,6 +1097,101 @@ export function parseExecutorMetadataBlob(
 }
 
 /**
+ * 折叠升序读取的 executor_metadata 行链：
+ * 当对话从规划阶段切入执行阶段（exit_plan_mode）后，宿主会追加新行把 plan_model 改写为当前执行模型（plan === exec）；
+ * 此时保留此前同 exec 对应的真实规划模型配置，避免丢失初始 Plan&Execute 配对。
+ */
+export function parseExecutorMetadataChain(
+  blobs: ReadonlyArray<Uint8Array | Buffer | null | undefined>
+): ParsedExecutorMetadata {
+  const out: ParsedExecutorMetadata = {};
+  let hasDistinctPair = false;
+  for (const blob of blobs) {
+    if (!blob || blob.length === 0) continue;
+    const row = parseExecutorMetadataBlob(blob);
+    if (typeof row.maxContextTokens === 'number' && Number.isSafeInteger(row.maxContextTokens) && row.maxContextTokens > 0) {
+      out.maxContextTokens = row.maxContextTokens;
+    }
+    if (
+      typeof row.checkpointMaxTokenLimit === 'number' &&
+      Number.isSafeInteger(row.checkpointMaxTokenLimit) &&
+      row.checkpointMaxTokenLimit > 0
+    ) {
+      out.checkpointMaxTokenLimit = row.checkpointMaxTokenLimit;
+    }
+    const rowPlan =
+      typeof row.planModelEnum === 'number' && Number.isSafeInteger(row.planModelEnum) && row.planModelEnum > 0
+        ? row.planModelEnum
+        : undefined;
+    const rowExec =
+      typeof row.executionModelEnum === 'number' && Number.isSafeInteger(row.executionModelEnum) && row.executionModelEnum > 0
+        ? row.executionModelEnum
+        : undefined;
+    if (rowPlan !== undefined && rowExec !== undefined) {
+      if (rowPlan !== rowExec) {
+        out.planModelEnum = rowPlan;
+        out.executionModelEnum = rowExec;
+        out.plannerModelName = row.plannerModelName;
+        hasDistinctPair = true;
+      } else if (!hasDistinctPair || out.executionModelEnum !== rowExec) {
+        out.planModelEnum = rowPlan;
+        out.executionModelEnum = rowExec;
+        out.plannerModelName = row.plannerModelName;
+        hasDistinctPair = false;
+      }
+    } else if (rowPlan !== undefined) {
+      out.planModelEnum = rowPlan;
+      delete out.executionModelEnum;
+      out.plannerModelName = row.plannerModelName;
+      hasDistinctPair = false;
+    } else if (rowExec !== undefined) {
+      out.executionModelEnum = rowExec;
+      if (row.plannerModelName) out.plannerModelName = row.plannerModelName;
+    } else if (row.plannerModelName) {
+      out.plannerModelName = row.plannerModelName;
+    }
+  }
+  return out;
+}
+
+function registerObservedGenModels(gens: Iterable<ParsedGenMetadata | undefined>): void {
+  const entries: ObservedIdeModelEntry[] = [];
+  for (const gen of gens) {
+    if (!gen || !isPositiveSafeInt(gen.modelEnum)) continue;
+    const rawResp = (gen.responseModel || '').trim();
+    const rawDisp = (gen.modelDisplayName || '').trim();
+    if (!rawResp && !rawDisp) continue;
+    const respOrch = rawResp ? stripOrchestratorWrapper(rawResp) : null;
+    const isOpaqueResp = Boolean(
+      !rawResp ||
+        /^gemini-(?:pro-orchestrator|flash-worker)(?:-agy)?$/i.test(rawResp) ||
+        (respOrch?.isOrchestrator && !respOrch.inner)
+    );
+    const dispOrch = rawDisp ? stripOrchestratorWrapper(rawDisp) : null;
+    const cleanDisp = dispOrch?.isOrchestrator ? dispOrch.inner : rawDisp;
+    let modelId = '';
+    if (!isOpaqueResp) {
+      modelId = rawResp;
+    } else if (cleanDisp) {
+      const cap = resolveModelCapacity(cleanDisp);
+      if (cap.modelId && cap.modelId !== 'unknown-model') {
+        modelId = cap.modelId;
+      }
+    }
+    if (!modelId) continue;
+    entries.push({
+      modelId,
+      displayName: cleanDisp || null,
+      modelEnum: gen.modelEnum,
+      ...(isPositiveSafeInt(gen.maxContextTokens) ? { maxTokens: gen.maxContextTokens } : {}),
+    });
+  }
+  if (entries.length > 0) {
+    registerObservedIdeModels(entries);
+  }
+}
+
+/**
  * 有效输出速度：只对匹配的 Token 与完整正耗时计算，保留未舍入结果。
  */
 export function computeTps(
@@ -1345,12 +1446,12 @@ function buildCompactModelLabel(modelId: string, displayName: string): { shortLa
 function buildOrchestratorSlotKey(role: 'planner' | 'executor', modelId: string): string {
   const lower = (modelId || '').toLowerCase();
   const g4Match = lower.match(/^gemini-(?:[4-9](?:\.\d+)?)-([a-z][a-z0-9]*)/);
-  if (g4Match?.[1]) return `orchestrator:${g4Match[1]}`;
+  if (g4Match?.[1]) return `orchestrator:${role}:${g4Match[1]}`;
   if (lower === 'gemini-3.8-flash' || /^gemini-(?:[\d.]+-)?flash$/.test(lower)) {
-    return 'orchestrator:flash';
+    return `orchestrator:${role}:flash`;
   }
   const slug = lower.replace(/[^a-z0-9.-]+/g, '-').replace(/^-+|-+$/g, '');
-  return slug ? `orchestrator:${slug}` : `orchestrator:${role}`;
+  return slug ? `orchestrator:${role}:${slug}` : `orchestrator:${role}`;
 }
 
 function isPositiveSafeInt(value: unknown): value is number {
@@ -1461,6 +1562,7 @@ function classifyContextModelSlot(params: {
   executionModelEnum?: number;
   fallbackInputModelId?: string;
   hasPriorOrchestrator?: boolean;
+  phaseHint?: 'planner' | 'executor';
 }): ClassifiedContextSlot {
   const responseModel = (params.responseModel || '').trim();
   const modelDisplayName = (params.modelDisplayName || '').trim();
@@ -1616,12 +1718,26 @@ function classifyContextModelSlot(params: {
       (!planEnumSpec || planEnumSpec.modelId !== spec.modelId)
   );
 
+  const matchesDistinctProtocolPlanner = Boolean(
+    hasPlanExecuteProtocol &&
+      modelEnum !== undefined &&
+      planModelEnum !== undefined &&
+      planModelEnum !== executionModelEnum &&
+      modelEnum === planModelEnum
+  );
+
   const isExecutorRole =
     matchesProtocolExecutor ||
     matchesProtocolExecutorByModelId ||
     isLegacyWorker ||
     isTrailingOrchestratorExecutor ||
     isFallbackExecutor ||
+    Boolean(
+      params.phaseHint === 'executor' &&
+        !isLegacyPlanner &&
+        !isFallbackPlanner &&
+        !matchesDistinctProtocolPlanner
+    ) ||
     Boolean(
       params.hasPriorOrchestrator &&
         !hasPlanExecuteProtocol &&
@@ -1646,11 +1762,22 @@ function classifyContextModelSlot(params: {
     };
   }
 
+  const matchesProtocolPlannerByModelId = Boolean(
+    hasPlanExecuteProtocol &&
+      planEnumSpec &&
+      planEnumSpec.modelId === spec.modelId
+  );
+
   const isPlannerRole =
     matchesProtocolPlanner ||
-    hasPlanExecuteProtocol ||
+    matchesProtocolPlannerByModelId ||
     isLegacyPlanner ||
-    isFallbackPlanner;
+    isFallbackPlanner ||
+    Boolean(
+      hasPlanExecuteProtocol &&
+        (planModelEnum === undefined || modelEnum === undefined) &&
+        (!planEnumSpec || planEnumSpec.modelId === spec.modelId)
+    );
 
   if (isPlannerRole) {
     const resolvedDisplayName = modelDisplayName || stepModelName || spec.displayName;
@@ -1729,7 +1856,12 @@ function createStageSnapshot(
 }
 
 function resolveContextStagesAndActiveSlot(
-  usageContextEntries: ReadonlyArray<{ step: ComputeHudMetricsInput['steps'][number]; prompt: number; turnIndex?: number }>,
+  usageContextEntries: ReadonlyArray<{
+    step: ComputeHudMetricsInput['steps'][number];
+    prompt: number;
+    turnIndex?: number;
+    phaseHint?: 'planner' | 'executor';
+  }>,
   input: ComputeHudMetricsInput,
   compactionContextEntries: ReadonlyArray<{
     step: ComputeHudMetricsInput['steps'][number];
@@ -1812,7 +1944,12 @@ function resolveContextStagesAndActiveSlot(
           capacityTokens: emptySlot.capacityTokens,
           isFallbackModel: emptySlot.isFallbackModel,
         });
-        pair.push({ slot: plannerSlot, latestPrompt: 0, peakContextTokens: 0, explicitCapacity: emptyExplicitCap });
+        const sameAsExecutor =
+          plannerSlot.slotKey === emptySlot.slotKey ||
+          (plannerSlot.modelId !== 'pending' && plannerSlot.modelId === emptySlot.modelId);
+        if (!sameAsExecutor) {
+          pair.push({ slot: plannerSlot, latestPrompt: 0, peakContextTokens: 0, explicitCapacity: emptyExplicitCap });
+        }
         pair.push(emptyAcc);
       } else if (emptySlot.role === 'planner') {
         pair.push(emptyAcc);
@@ -1972,10 +2109,16 @@ function resolveContextStagesAndActiveSlot(
     const isGlobalLatest = i === usageContextEntries.length - 1;
     const stepGenMeta = entry.step.generation ?? (isGlobalLatest ? input.genMetadata : undefined);
     const prevTurnConfig = turnPlanExecConfig.get(turnIndex);
+    const applyExecMetaFallback = Boolean(
+      execMetaAppliesToLatestTurn &&
+        (turnIndex === lastTurnNum ||
+          entry.phaseHint === 'executor' ||
+          (stepGenMeta?.modelEnum !== undefined && stepGenMeta.modelEnum === execMetaPlanEnum))
+    );
     const stepExecEnum =
       stepGenMeta?.executionModelEnum ??
       prevTurnConfig?.executionModelEnum ??
-      (turnIndex === lastTurnNum && execMetaAppliesToLatestTurn ? execMetaExecEnum : undefined);
+      (applyExecMetaFallback ? execMetaExecEnum : undefined);
     const rawStepPlanEnum = stepGenMeta?.planModelEnum;
     const distinctPrevPlanEnum =
       prevTurnConfig?.planModelEnum !== undefined && prevTurnConfig.planModelEnum !== stepExecEnum
@@ -1999,13 +2142,13 @@ function resolveContextStagesAndActiveSlot(
       );
       stepPlanEnum =
         distinctPrevPlanEnum ??
-        (turnIndex === lastTurnNum || !prevTurnConfig ? distinctExecMetaPlanEnum : undefined) ??
+        (turnIndex === lastTurnNum || !prevTurnConfig || applyExecMetaFallback ? distinctExecMetaPlanEnum : undefined) ??
         (domSuggestsDifferentPlanner ? undefined : rawStepPlanEnum);
     } else {
       stepPlanEnum =
         rawStepPlanEnum ??
         prevTurnConfig?.planModelEnum ??
-        (turnIndex === lastTurnNum && execMetaAppliesToLatestTurn ? execMetaPlanEnum : undefined);
+        (applyExecMetaFallback ? execMetaPlanEnum : undefined);
     }
     if (stepExecEnum && stepExecEnum > 0) {
       const preservedPlanEnum =
@@ -2038,6 +2181,7 @@ function resolveContextStagesAndActiveSlot(
       executionModelEnum: stepExecEnum,
       fallbackInputModelId: stepFallbackModel,
       hasPriorOrchestrator: orchestratorTurns.has(turnIndex),
+      phaseHint: entry.phaseHint,
     });
     if (hasStepExplicitModel && slot.hasExplicitEvidence && slot.modelId !== 'unknown') {
       lastExplicitFallbackModel = slot.role === 'model' ? slot.displayName : slot.modelId;
@@ -2157,16 +2301,23 @@ function resolveContextStagesAndActiveSlot(
         capacityTokens: activeAcc.slot.capacityTokens,
         isFallbackModel: activeAcc.slot.isFallbackModel,
       });
-      planners.push({
-        slot: fallbackPlannerSlot,
-        latestPrompt: 0,
-        peakContextTokens: 0,
-        explicitCapacity: inheritedOrchCap ?? inputExplicitCapacity,
-        lastSeenSeq: -1,
-      });
+      const sameAsAnyExecutor = executors.some(
+        (e) =>
+          e.slot.slotKey === fallbackPlannerSlot.slotKey ||
+          (fallbackPlannerSlot.modelId !== 'pending' && e.slot.modelId === fallbackPlannerSlot.modelId)
+      );
+      if (!sameAsAnyExecutor) {
+        planners.push({
+          slot: fallbackPlannerSlot,
+          latestPrompt: 0,
+          peakContextTokens: 0,
+          explicitCapacity: inheritedOrchCap ?? inputExplicitCapacity,
+          lastSeenSeq: -1,
+        });
+      }
     }
-    const primaryPlanner = planners[0]!;
-    if (executors.length === 0) {
+    const primaryPlanner = planners[0];
+    if (executors.length === 0 && primaryPlanner) {
       const pendingExecSlot = createPendingExecutorSlot({
         executionModelEnum: effectiveExecutionModelEnum,
         capacityTokens: primaryPlanner.slot.capacityTokens,
@@ -2195,7 +2346,11 @@ function resolveContextStagesAndActiveSlot(
       const modelId = pe.slot.modelId;
       if (modelId && modelId !== 'pending' && modelId !== 'unknown') {
         const existingPe = peByModelId.get(modelId);
-        if (!existingPe || (!existingPe.latestStep && Boolean(pe.latestStep))) {
+        if (
+          !existingPe ||
+          (!existingPe.latestStep && Boolean(pe.latestStep)) ||
+          (Boolean(pe.latestStep) && pe.lastSeenSeq > existingPe.lastSeenSeq)
+        ) {
           peByModelId.set(modelId, pe);
         }
       }
@@ -2412,6 +2567,11 @@ function resolveContextStagesAndActiveSlot(
 export function buildConversationHudMetrics(input: ComputeHudMetricsInput): ConversationHudMetrics {
   const steps = input.steps || [];
   const contextSteps = input.contextSteps ?? steps;
+  registerObservedGenModels([
+    input.genMetadata,
+    ...steps.map(s => s.generation),
+    ...(input.extraUsageGenerations ?? []).map(e => e.generation),
+  ]);
   const contextStepSet = input.contextSteps ? new Set(contextSteps) : null;
   let modelSteps = 0;
   let toolSteps = 0;
@@ -2590,7 +2750,12 @@ export function buildConversationHudMetrics(input: ComputeHudMetricsInput): Conv
   const modelDurationSeconds = mainCompletedModelDuration + childCompletedModelDuration;
   const toolDurationSeconds = mergeDurationIntervals(completedToolIntervals);
 
-  const usageContextEntries: Array<{ step: ComputeHudMetricsInput['steps'][number]; prompt: number; turnIndex: number }> = [];
+  const usageContextEntries: Array<{
+    step: ComputeHudMetricsInput['steps'][number];
+    prompt: number;
+    turnIndex: number;
+    phaseHint?: 'planner' | 'executor';
+  }> = [];
   const compactionContextEntries: Array<{
     step: ComputeHudMetricsInput['steps'][number];
     precedingUsageIndex: number;
@@ -2598,11 +2763,27 @@ export function buildConversationHudMetrics(input: ComputeHudMetricsInput): Conv
   }> = [];
   let turns = 0;
   let compactionCount = 0;
+  let inExecutionPhase = false;
+  let sawPlanTransitionInTurn = false;
   for (const step of contextSteps) {
     const stepType = step.step_type ?? step.stepType ?? 0;
     const rawStatus = step.status ?? 3;
-    if (stepType === 14) turns++;
-    if (stepType === 23 && (rawStatus === 3 || rawStatus === 5)) {
+    const isCompletedTransition = rawStatus === 3 || rawStatus === 5;
+    if (stepType === 14) {
+      turns++;
+      sawPlanTransitionInTurn = false;
+    }
+    if (step.toolCallName && isCompletedTransition) {
+      const cleanTool = step.toolCallName.trim();
+      if (EXIT_PLAN_MODE_TOOL_RE.test(cleanTool)) {
+        inExecutionPhase = true;
+        sawPlanTransitionInTurn = true;
+      } else if (ENTER_PLAN_MODE_TOOL_RE.test(cleanTool)) {
+        inExecutionPhase = false;
+        sawPlanTransitionInTurn = true;
+      }
+    }
+    if (stepType === 23 && isCompletedTransition) {
       compactionCount++;
       compactionContextEntries.push({
         step,
@@ -2611,13 +2792,33 @@ export function buildConversationHudMetrics(input: ComputeHudMetricsInput): Conv
       });
     }
     if (stepType !== 15 || step.hasUsage === false) continue;
+    const stepGen = step.generation;
+    if (
+      stepGen?.planModelEnum &&
+      stepGen.executionModelEnum &&
+      stepGen.planModelEnum !== stepGen.executionModelEnum &&
+      stepGen.modelEnum === stepGen.planModelEnum
+    ) {
+      inExecutionPhase = false;
+      sawPlanTransitionInTurn = true;
+    }
     const prompt = safeTokens(step.rawInput ?? step.rawInputTokens) +
       safeTokens(step.cachedTokens ?? step.cachedReadTokens) + safeTokens(step.cacheWriteTokens);
     const estCtx = safeTokens(step.generation?.estimatedTokensUsed);
     const effectivePrompt = prompt > 0 ? prompt : estCtx;
     const outputTok = safeTokens(step.outputTokens);
     if (effectivePrompt > 0 || (step.hasUsage === true && outputTok > 0)) {
-      usageContextEntries.push({ step, prompt: effectivePrompt, turnIndex: turns });
+      const phaseHint: 'planner' | 'executor' | undefined = inExecutionPhase
+        ? 'executor'
+        : sawPlanTransitionInTurn
+          ? 'planner'
+          : undefined;
+      usageContextEntries.push({
+        step,
+        prompt: effectivePrompt,
+        turnIndex: turns,
+        ...(phaseHint ? { phaseHint } : {}),
+      });
     }
   }
   const {
@@ -3638,6 +3839,7 @@ export class ConversationMetricsEngine {
         executorMetaUnchanged,
         executorMetaDigest,
         executorMetaBlob,
+        executorMetaBlobs,
         trajectoryId,
         metaBlobProjectedSlices,
         maxIdx,
@@ -3656,6 +3858,8 @@ export class ConversationMetricsEngine {
       const executorMetadata: ParsedExecutorMetadata | undefined =
         executorMetaUnchanged && existing
           ? existing.executorMetadata
+          : executorMetaBlobs && executorMetaBlobs.length > 0
+          ? parseExecutorMetadataChain(executorMetaBlobs)
           : executorMetaBlob && executorMetaBlob.byteLength > 0
           ? parseExecutorMetadataBlob(executorMetaBlob)
           : undefined;
@@ -3728,6 +3932,7 @@ export class ConversationMetricsEngine {
           generations.set(item.idx, parseLatestGenMetadataBlob(item.data));
         }
       }
+      registerObservedGenModels(generations.values());
 
       const stepByIndex = new Map(baseSteps.map(step => [step.idx, step]));
       const sortedGenerations = [...generations.entries()].sort((a, b) => a[0] - b[0]);

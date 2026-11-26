@@ -197,7 +197,7 @@ async function verifyBackendDistParity(bundleDir) {
 
 export async function packagePluginZip({
   rebuild = false,
-  bundleDir = join(repoRoot, 'artifacts', 'agy-usage'),
+  bundleDir = join(repoRoot, 'artifacts', 'agy-usage-tool'),
   outDir = join(repoRoot, 'artifacts'),
 } = {}) {
   const pkg = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8'));
@@ -216,7 +216,7 @@ export async function packagePluginZip({
     );
   }
 
-  const zipName = `agy-usage-v${pkg.version}.zip`;
+  const zipName = `agy-usage-tool-v${pkg.version}.zip`;
   const zipPath = join(resolvedOutDir, zipName);
   const sumsPath = join(resolvedOutDir, 'SHA256SUMS.txt');
   await rm(zipPath, { force: true });

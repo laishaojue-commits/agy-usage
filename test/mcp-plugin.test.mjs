@@ -186,10 +186,10 @@ test('Single-file MCP App HTML, plugin manifest, and 34-module AST allowlist val
   assert.equal(/<link[^>]+rel=["']stylesheet/i.test(html), false, 'mcp-app.html must not contain external <link rel="stylesheet">');
   assert.equal(/["']\.?\/assets\//i.test(html), false, 'mcp-app.html must not reference external /assets/ files');
   assert.equal(/<meta name="gb-runtime-mode" content="mcp-app"/i.test(html), true);
-  assert.equal(/<title>agy-usage<\/title>/i.test(html), true, 'mcp-app.html title must be agy-usage');
+  assert.equal(/<title>agy-usage-tool<\/title>/i.test(html), true, 'mcp-app.html title must be agy-usage-tool');
   assert.equal(/<style\b/i.test(html), true, 'mcp-app.html must inline CSS styles');
   assert.equal(/<script\b/i.test(html), true, 'mcp-app.html must inline JS bundle');
-  assert.equal(html.includes('agy_usage_ipc'), true, 'mcp-app.html must call agy_usage_ipc');
+  assert.equal(html.includes('agy_usage_tool_ipc'), true, 'mcp-app.html must call agy_usage_tool_ipc');
   assert.equal(html.includes('gravitybox_ipc'), false, 'mcp-app.html must not call legacy gravitybox_ipc');
   assert.equal(html.includes('open_gravitybox'), false, 'mcp-app.html must not reference legacy open_gravitybox');
   assert.ok((html.match(/data:image\/png;base64,/g) || []).length >= 4, 'mcp-app.html must inline PNG icons');
@@ -201,23 +201,26 @@ test('Single-file MCP App HTML, plugin manifest, and 34-module AST allowlist val
   for (const key of Object.keys(pluginJson)) {
     assert.ok(allowedTopLevel.has(key), `Unexpected top-level field in plugin.json: ${key}`);
   }
-  assert.equal(pluginJson.name, 'agy-usage');
-  assert.equal(pluginJson.displayName, 'agy-usage');
+  assert.equal(pluginJson.name, 'agy-usage-tool');
+  assert.equal(pluginJson.displayName, 'agy-usage-tool');
+  assert.equal(pluginJson.version, '0.1.0');
   assert.equal(pluginJson.logo, 'assets/logo.png');
   assert.equal(pluginJson.suggestedPrompts.length, 3);
-  assert.equal(pluginJson.suggestedPrompts.every((p) => p.includes('agy-usage')), true);
+  assert.equal(pluginJson.suggestedPrompts.every((p) => p.includes('agy-usage-tool')), true);
 
   const pluginPkg = JSON.parse(await readFile(join(pluginDir, 'package.json'), 'utf8'));
-  assert.equal(pluginPkg.name, 'agy-usage');
+  assert.equal(pluginPkg.name, 'agy-usage-tool');
+  assert.equal(pluginPkg.version, '0.1.0');
 
   const pluginReadme = await readFile(join(pluginDir, 'README.md'), 'utf8');
-  assert.equal(pluginReadme.includes('# agy-usage Plugin'), true);
-  assert.equal(pluginReadme.includes('Pure Local Read-Only'), true);
+  assert.equal(pluginReadme.includes('# agy-usage-tool'), true);
+  assert.equal(pluginReadme.includes('Pure Local Read-Only') || pluginReadme.includes('纯本地只读'), true);
 
   const mcpCfg = JSON.parse(await readFile(join(pluginDir, 'mcp_config.json'), 'utf8'));
   assert.equal(mcpCfg.mcpServers.gravitybox, undefined);
-  assert.equal(mcpCfg.mcpServers['agy-usage'].command, 'node');
-  assert.deepEqual(mcpCfg.mcpServers['agy-usage'].args, [
+  assert.equal(mcpCfg.mcpServers['agy-usage'], undefined);
+  assert.equal(mcpCfg.mcpServers['agy-usage-tool'].command, 'node');
+  assert.deepEqual(mcpCfg.mcpServers['agy-usage-tool'].args, [
     '${PLUGIN_ROOT}/bin/server.mjs',
     '--data-dir',
     '${PLUGIN_DATA}',
@@ -274,47 +277,48 @@ test('Stdio MCP Server protocol contract, pure local read-only gate, and UI pref
   const init = await client.request('initialize', {
     protocolVersion: '2025-11-21',
     capabilities: {},
-    clientInfo: { name: 'agy-usage-test', version: '1.0.0' },
+    clientInfo: { name: 'agy-usage-tool-test', version: '0.1.0' },
   });
-  assert.equal(init.serverInfo?.name, 'agy-usage');
+  assert.equal(init.serverInfo?.name, 'agy-usage-tool');
+  assert.equal(init.serverInfo?.version, '0.1.0');
   assert.ok(init.capabilities?.tools, 'Server must declare tools capability');
   assert.ok(init.capabilities?.resources, 'Server must declare resources capability');
   client.notify('notifications/initialized', {});
 
   const resList = await client.request('resources/list', {});
-  const appResource = resList.resources.find((r) => r.uri === 'ui://agy-usage/app.html');
-  assert.ok(appResource, 'ui://agy-usage/app.html must be in resources/list');
-  assert.equal(appResource.name, 'agy-usage Dashboard');
+  const appResource = resList.resources.find((r) => r.uri === 'ui://agy-usage-tool/app.html');
+  assert.ok(appResource, 'ui://agy-usage-tool/app.html must be in resources/list');
+  assert.equal(appResource.name, 'agy-usage-tool Dashboard');
   assert.equal(appResource.mimeType, 'text/html;profile=mcp-app');
   assert.equal(appResource._meta?.ui?.prefersBorder, false);
 
-  const resRead = await client.request('resources/read', { uri: 'ui://agy-usage/app.html' });
+  const resRead = await client.request('resources/read', { uri: 'ui://agy-usage-tool/app.html' });
   assert.deepEqual(resRead.contents[0]._meta.ui.csp.connectDomains, []);
   assert.deepEqual(resRead.contents[0]._meta.ui.permissions, {});
   assert.equal(resRead.contents[0].mimeType, 'text/html;profile=mcp-app');
   assert.ok(resRead.contents[0].text.includes('<div id="app"></div>'));
 
   const toolsList = await client.request('tools/list', {});
-  const openTool = toolsList.tools.find((tool) => tool.name === 'open_agy_usage');
-  const ipcTool = toolsList.tools.find((tool) => tool.name === 'agy_usage_ipc');
-  assert.ok(openTool, 'open_agy_usage tool must exist');
-  assert.ok(ipcTool, 'agy_usage_ipc tool must exist');
+  const openTool = toolsList.tools.find((tool) => tool.name === 'open_agy_usage_tool');
+  const ipcTool = toolsList.tools.find((tool) => tool.name === 'agy_usage_tool_ipc');
+  assert.ok(openTool, 'open_agy_usage_tool tool must exist');
+  assert.ok(ipcTool, 'agy_usage_tool_ipc tool must exist');
 
-  assert.equal(openTool.title, 'agy-usage');
+  assert.equal(openTool.title, 'agy-usage-tool');
   assert.deepEqual(openTool.inputSchema?.properties?.view?.enum, ['overview', 'context', 'usage', 'storage', 'settings', 'about']);
   assert.equal(openTool.inputSchema?.properties?.conversationId?.type, 'string');
-  assert.equal(openTool._meta?.ui?.resourceUri, 'ui://agy-usage/app.html');
+  assert.equal(openTool._meta?.ui?.resourceUri, 'ui://agy-usage-tool/app.html');
   assert.deepEqual(openTool._meta?.ui?.visibility, ['model', 'app']);
   assert.deepEqual(openTool._meta?.['com.google.antigravity/ui']?.entrypoints, [
-    { type: 'aux_pane', title: 'agy-usage' },
-    { type: 'global', title: 'agy-usage' },
+    { type: 'aux_pane', title: 'agy-usage-tool' },
+    { type: 'global', title: 'agy-usage-tool' },
   ]);
-  assert.equal(ipcTool.title, 'agy-usage IPC Bridge');
+  assert.equal(ipcTool.title, 'agy-usage-tool IPC Bridge');
   assert.deepEqual(ipcTool._meta?.ui?.visibility, ['app']);
 
-  const openEmptyRes = await client.request('tools/call', { name: 'open_agy_usage', arguments: {} });
+  const openEmptyRes = await client.request('tools/call', { name: 'open_agy_usage_tool', arguments: {} });
   assert.ok(Buffer.byteLength(JSON.stringify(openEmptyRes), 'utf8') < 1024 * 1024);
-  assert.ok(openEmptyRes.content[0].text.includes('agy-usage opened'));
+  assert.ok(openEmptyRes.content[0].text.includes('agy-usage-tool'));
   assert.equal(openEmptyRes.structuredContent.initialView, 'overview');
   assert.equal(openEmptyRes.structuredContent.runtimeInfo.mode, 'mcp-app');
   assert.equal(openEmptyRes.structuredContent.runtimeInfo.readOnlyMode, true);
@@ -323,20 +327,20 @@ test('Stdio MCP Server protocol contract, pure local read-only gate, and UI pref
   assert.equal(openEmptyRes.structuredContent.runtimeInfo.winHelperActive, false);
 
   const openQuotaFallback = await client.request('tools/call', {
-    name: 'open_agy_usage',
+    name: 'open_agy_usage_tool',
     arguments: { view: 'quota' },
   });
   assert.equal(openQuotaFallback.structuredContent.initialView, 'overview');
 
   const openStorageRes = await client.request('tools/call', {
-    name: 'open_agy_usage',
+    name: 'open_agy_usage_tool',
     arguments: { view: 'storage' },
   });
   assert.equal(openStorageRes.structuredContent.initialView, 'storage');
 
   async function callIpc(payload) {
     const res = await client.request('tools/call', {
-      name: 'agy_usage_ipc',
+      name: 'agy_usage_tool_ipc',
       arguments: { payload },
     });
     assert.ok(res.structuredContent && typeof res.structuredContent === 'object');
@@ -379,12 +383,11 @@ test('Stdio MCP Server protocol contract, pure local read-only gate, and UI pref
     assert.equal(reply.ok, false);
     assert.equal(reply.code, 'PURE_LOCAL_READ_ONLY');
   }
-  const invalidLanguage = await callIpc({ command: 'ui_prefs_set', language: 'a'.repeat(200) });
-  assert.equal(invalidLanguage.ok, false);
+  const invalidTheme = await callIpc({ command: 'ui_prefs_set', theme: 'a'.repeat(200) });
+  assert.equal(invalidTheme.ok, false);
 
-  const langZh = await callIpc({ command: 'language_set', language: 'zh-Hans' });
-  assert.equal(langZh.ok, true);
-  assert.equal(langZh.status.locale, 'zh-Hans');
+  const removedLangCmd = await callIpc({ command: 'language_set', language: 'en' });
+  assert.equal(removedLangCmd.ok, false);
 
   const scan = await callIpc({ command: 'maintenance_scan' });
   assert.equal(scan.ok, true);
@@ -406,19 +409,19 @@ test('Stdio MCP Server protocol contract, pure local read-only gate, and UI pref
   assert.equal(hist.ok, true);
   assert.ok(Array.isArray(hist.snapshots));
 
-  const prefsSet = await callIpc({ command: 'ui_prefs_set', theme: 'dark', language: 'en' });
+  const prefsSet = await callIpc({ command: 'ui_prefs_set', theme: 'dark' });
   assert.equal(prefsSet.ok, true);
   assert.equal(prefsSet.prefs.theme, 'dark');
-  assert.equal(prefsSet.prefs.language, 'en');
+  assert.equal(prefsSet.prefs.language, undefined);
 
   const prefsGet = await callIpc({ command: 'ui_prefs_get' });
   assert.equal(prefsGet.ok, true);
   assert.equal(prefsGet.prefs.theme, 'dark');
-  assert.equal(prefsGet.prefs.language, 'en');
+  assert.equal(prefsGet.prefs.language, undefined);
 
   const persistedPrefs = JSON.parse(await readFile(join(dataDir, 'ui-prefs.json'), 'utf8'));
   assert.equal(persistedPrefs.theme, 'dark');
-  assert.equal(persistedPrefs.language, 'en');
+  assert.equal(persistedPrefs.language, undefined);
 
   for (const legacyCmd of [
     { command: 'quota_probe_live' },
@@ -454,16 +457,19 @@ test('Stdio MCP Server protocol contract, pure local read-only gate, and UI pref
   assert.equal(exitResult.code, 0);
 });
 
-test('Self-contained plugin install runs isolated and cleans legacy gravitybox safely', { timeout: 30000 }, async (t) => {
+test('Self-contained plugin install runs isolated and cleans legacy gravitybox and agy-usage safely', { timeout: 30000 }, async (t) => {
   const tempRoot = await mkdtemp(join(tmpdir(), 'agy-mcp-installed-'));
   const defaults = getDefaultPluginPaths(tempRoot);
   const installedDir = defaults.dest;
-  const legacyDir = defaults.legacyDir;
+  const legacyGravityboxDir = join(defaults.pluginsRoot, 'gravitybox');
+  const legacyAgyUsageDir = join(defaults.pluginsRoot, 'agy-usage');
   const dataDir = join(tempRoot, 'plugin-data');
   const geminiDir = join(tempRoot, 'gemini');
   await mkdir(geminiDir, { recursive: true });
-  await mkdir(legacyDir, { recursive: true });
-  await writeFile(join(legacyDir, 'plugin.json'), JSON.stringify({ name: 'gravitybox', version: '1.1.3' }), 'utf8');
+  await mkdir(legacyGravityboxDir, { recursive: true });
+  await writeFile(join(legacyGravityboxDir, 'plugin.json'), JSON.stringify({ name: 'gravitybox', version: '1.1.3' }), 'utf8');
+  await mkdir(legacyAgyUsageDir, { recursive: true });
+  await writeFile(join(legacyAgyUsageDir, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '1.1.3' }), 'utf8');
 
   t.after(async () => {
     await rm(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
@@ -471,14 +477,16 @@ test('Self-contained plugin install runs isolated and cleans legacy gravitybox s
 
   const info = await installPlugin({ homeDir: tempRoot, build: false });
   assert.equal(info.dest, installedDir);
-  assert.equal(info.removedLegacyDir, legacyDir);
-  assert.equal(existsSync(legacyDir), false);
+  assert.equal(existsSync(legacyGravityboxDir), false);
+  assert.equal(existsSync(legacyAgyUsageDir), false);
   assert.equal(existsSync(join(installedDir, 'plugin.json')), true);
   assert.equal(existsSync(join(installedDir, 'mcp_config.json')), true);
   assert.equal(existsSync(join(installedDir, 'ui', 'mcp-app.html')), true);
   assert.equal(existsSync(join(installedDir, 'backend', 'package.json')), true);
   assert.equal(existsSync(join(installedDir, 'backend', 'dist', 'usage-core.js')), true);
   assert.equal(existsSync(join(installedDir, 'backend', 'assets', 'i18n', 'zh-Hans.json')), true);
+  assert.equal(existsSync(join(installedDir, 'backend', 'assets', 'i18n', 'en.json')), false);
+  assert.equal(existsSync(join(installedDir, 'backend', 'assets', 'pricing-feed.json')), false);
   assert.equal(existsSync(join(installedDir, 'node_modules', '@modelcontextprotocol', 'sdk', 'package.json')), true);
 
   const client = createStdioMcpClient(
@@ -502,16 +510,16 @@ test('Self-contained plugin install runs isolated and cleans legacy gravitybox s
   const init = await client.request('initialize', {
     protocolVersion: '2025-11-21',
     capabilities: {},
-    clientInfo: { name: 'agy-usage-installed-test', version: '1.0.0' },
+    clientInfo: { name: 'agy-usage-tool-installed-test', version: '0.1.0' },
   });
-  assert.equal(init.serverInfo?.name, 'agy-usage');
+  assert.equal(init.serverInfo?.name, 'agy-usage-tool');
   client.notify('notifications/initialized', {});
 
-  const htmlRes = await client.request('resources/read', { uri: 'ui://agy-usage/app.html' });
+  const htmlRes = await client.request('resources/read', { uri: 'ui://agy-usage-tool/app.html' });
   assert.equal(htmlRes.contents[0].mimeType, 'text/html;profile=mcp-app');
 
   const scanRes = await client.request('tools/call', {
-    name: 'agy_usage_ipc',
+    name: 'agy_usage_tool_ipc',
     arguments: { payload: { command: 'maintenance_scan' } },
   });
   assert.equal(scanRes.structuredContent.ok, true);
@@ -542,10 +550,10 @@ test('installPlugin preserves rollback backups on rejected destination and clean
 
   const defaults = getDefaultPluginPaths(tempRoot);
   const installedDir = defaults.dest;
-  const stageRoot = join(tempRoot, '.gemini', 'config', '.agy-usage-install-stage');
+  const stageRoot = join(tempRoot, '.gemini', 'config', '.agy-usage-tool-install-stage');
   const oldBackup = join(stageRoot, 'stage-1000-2000-previous');
   const oldBackupManifest = join(oldBackup, 'plugin.json');
-  const oldBackupContent = JSON.stringify({ name: 'agy-usage', version: '0.8.0' });
+  const oldBackupContent = JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' });
   await mkdir(oldBackup, { recursive: true });
   await writeFile(oldBackupManifest, oldBackupContent, 'utf8');
   await writeFile(join(oldBackup, 'mcp_config.json'), '{}', 'utf8');
@@ -557,7 +565,7 @@ test('installPlugin preserves rollback backups on rejected destination and clean
 
   await assert.rejects(
     installPlugin({ homeDir: tempRoot, build: false }),
-    /does not contain an agy-usage installation/i
+    /does not contain an agy-usage-tool installation/i
   );
   assert.equal(await readFile(join(installedDir, 'plugin.json'), 'utf8'), otherManifest);
   assert.equal(await readFile(oldBackupManifest, 'utf8'), oldBackupContent);
@@ -573,16 +581,16 @@ test('installPlugin preserves rollback backups on rejected destination and clean
   assert.equal(await readFile(installedDir, 'utf8'), 'regular-file-blocker');
   assert.equal(await readFile(oldBackupManifest, 'utf8'), oldBackupContent);
 
-  // Case 3: valid agy-usage in dest -> install succeeds & cleans stale backup
+  // Case 3: valid agy-usage-tool in dest -> install succeeds & cleans stale backup
   await rm(installedDir, { force: true });
   await mkdir(installedDir, { recursive: true });
-  await writeFile(join(installedDir, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '0.9.0' }), 'utf8');
+  await writeFile(join(installedDir, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' }), 'utf8');
 
   const info = await installPlugin({ homeDir: tempRoot, build: false });
   assert.equal(info.dest, installedDir);
   assert.equal(existsSync(oldBackup), false);
   assert.equal(existsSync(stageRoot), false);
-  assert.deepEqual(await readdir(defaults.pluginsRoot), ['agy-usage']);
+  assert.deepEqual(await readdir(defaults.pluginsRoot), ['agy-usage-tool']);
 });
 
 test('installPlugin preserves backup manifests when swap and rollback both fail', { timeout: 30000 }, async (t) => {
@@ -593,13 +601,13 @@ test('installPlugin preserves backup manifests when swap and rollback both fail'
 
   const defaults = getDefaultPluginPaths(tempRoot);
   const installedDir = defaults.dest;
-  const stageRoot = join(tempRoot, '.gemini', 'config', '.agy-usage-install-stage');
+  const stageRoot = join(tempRoot, '.gemini', 'config', '.agy-usage-tool-install-stage');
   const oldBackup = join(stageRoot, 'stage-1000-2000-previous');
   await mkdir(oldBackup, { recursive: true });
-  await writeFile(join(oldBackup, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '0.7.0' }), 'utf8');
+  await writeFile(join(oldBackup, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' }), 'utf8');
 
   await mkdir(installedDir, { recursive: true });
-  await writeFile(join(installedDir, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '0.9.0' }), 'utf8');
+  await writeFile(join(installedDir, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' }), 'utf8');
   await writeFile(join(installedDir, 'mcp_config.json'), JSON.stringify({ mcpServers: {} }), 'utf8');
   await writeFile(join(installedDir, 'marker.txt'), 'original-install', 'utf8');
 
@@ -624,7 +632,7 @@ test('installPlugin preserves backup manifests when swap and rollback both fail'
   );
   assert.equal(existsSync(join(capturedBackup, 'plugin.json')), true);
   assert.equal(existsSync(join(capturedBackup, 'mcp_config.json')), true);
-  assert.equal(existsSync(join(capturedBackup, '.agy-usage-managed-backup.json')), false);
+  assert.equal(existsSync(join(capturedBackup, '.agy-usage-tool-managed-backup.json')), false);
   assert.equal(await readFile(join(capturedBackup, 'marker.txt'), 'utf8'), 'original-install');
   assert.equal(existsSync(join(oldBackup, 'plugin.json')), true);
 });
@@ -635,31 +643,47 @@ test('installPlugin never cleans sibling dirs in custom dest', { timeout: 30000 
     await rm(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
-  // Scenario A: Custom destination must never scan or delete sibling directories in parentDir
+  // Scenario A: Custom destination preserves unrelated siblings, cleans verified non-sibling managed backup, and rejects bad --dest CLI flags
   const customRoot = join(tempRoot, 'custom');
-  const customDest = join(customRoot, 'agy-usage');
+  const customDest = join(customRoot, 'agy-usage-tool');
   const customOtherTool = join(customRoot, 'stage-other-tool-previous');
   const customNumericDir = join(customRoot, 'stage-123-456-previous');
+  const customManagedBackup = join(customRoot, '.agy-usage-tool-plugin-stage-111-222-previous');
   await mkdir(customDest, { recursive: true });
-  await writeFile(join(customDest, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '0.9.0' }), 'utf8');
+  await writeFile(join(customDest, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' }), 'utf8');
   await mkdir(customOtherTool, { recursive: true });
   await mkdir(customNumericDir, { recursive: true });
+  await mkdir(customManagedBackup, { recursive: true });
   await writeFile(join(customOtherTool, 'keep.txt'), 'other-tool-data', 'utf8');
   await writeFile(join(customNumericDir, 'keep.txt'), 'unrelated-numeric-data', 'utf8');
+  await writeFile(
+    join(customManagedBackup, '.agy-usage-tool-managed-backup.json'),
+    JSON.stringify({ managedBy: 'agy-usage-tool-installer', plugin: 'agy-usage-tool' }),
+    'utf8'
+  );
 
   await installPlugin({ dest: customDest, build: false });
   assert.equal(await readFile(join(customOtherTool, 'keep.txt'), 'utf8'), 'other-tool-data');
   assert.equal(await readFile(join(customNumericDir, 'keep.txt'), 'utf8'), 'unrelated-numeric-data');
+  assert.equal(existsSync(customManagedBackup), false, 'Locked non-sibling managed backup must be cleaned');
+
+  const installerScript = join(repoRoot, 'tools', 'install-plugin.mjs');
+  for (const badArgs of [['--dest'], ['--dest', '--no-build'], ['--dest=']]) {
+    assert.throws(
+      () => execFileSync(process.execPath, [installerScript, ...badArgs], { stdio: 'pipe', encoding: 'utf8' }),
+      (err) => err.status !== 0 && /Missing destination path/i.test(String(err.stderr || err.message || ''))
+    );
+  }
 });
 
-test('installPlugin cleans only verified agy-usage backups inside sibling stage', { timeout: 30000 }, async (t) => {
+test('installPlugin cleans only verified agy-usage-tool backups inside sibling stage', { timeout: 30000 }, async (t) => {
   const homeRoot = await mkdtemp(join(tmpdir(), 'agy-mcp-stage-proof-'));
   t.after(async () => {
     await rm(homeRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
-  // Scenario B: Inside .agy-usage-install-stage, clean only exact-format + verified agy-usage backups
-  const stageRoot = join(homeRoot, '.gemini', 'config', '.agy-usage-install-stage');
+  // Scenario B: Inside .agy-usage-tool-install-stage, clean only exact-format + verified agy-usage-tool backups
+  const stageRoot = join(homeRoot, '.gemini', 'config', '.agy-usage-tool-install-stage');
   const stageOtherTool = join(stageRoot, 'stage-other-tool-previous');
   const stageUnproven = join(stageRoot, 'stage-999-999-previous');
   const stageVerifiedManifest = join(stageRoot, 'stage-111-222-previous');
@@ -672,21 +696,21 @@ test('installPlugin cleans only verified agy-usage backups inside sibling stage'
   await mkdir(stageUnproven, { recursive: true });
   await writeFile(join(stageUnproven, 'keep.txt'), 'keep-unproven', 'utf8');
   await mkdir(stageVerifiedManifest, { recursive: true });
-  await writeFile(join(stageVerifiedManifest, 'plugin.json'), JSON.stringify({ name: 'agy-usage' }), 'utf8');
+  await writeFile(join(stageVerifiedManifest, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool' }), 'utf8');
   await mkdir(stageVerifiedMarker, { recursive: true });
   await writeFile(
-    join(stageVerifiedMarker, '.agy-usage-managed-backup.json'),
-    JSON.stringify({ managedBy: 'agy-usage-installer', plugin: 'agy-usage' }),
+    join(stageVerifiedMarker, '.agy-usage-tool-managed-backup.json'),
+    JSON.stringify({ managedBy: 'agy-usage-tool-installer', plugin: 'agy-usage-tool' }),
     'utf8'
   );
   await mkdir(join(stageVerifiedPkg, 'backend'), { recursive: true });
-  await writeFile(join(stageVerifiedPkg, 'package.json'), JSON.stringify({ name: 'agy-usage-mcp-plugin' }), 'utf8');
-  await writeFile(join(stageVerifiedPkg, 'backend', 'package.json'), JSON.stringify({ name: 'agy-usage-backend' }), 'utf8');
+  await writeFile(join(stageVerifiedPkg, 'package.json'), JSON.stringify({ name: 'agy-usage-tool' }), 'utf8');
+  await writeFile(join(stageVerifiedPkg, 'backend', 'package.json'), JSON.stringify({ name: 'agy-usage-tool-backend' }), 'utf8');
   await mkdir(stageConflictingManifest, { recursive: true });
   await writeFile(join(stageConflictingManifest, 'plugin.json'), JSON.stringify({ name: 'other-plugin' }), 'utf8');
   await writeFile(
-    join(stageConflictingManifest, '.agy-usage-managed-backup.json'),
-    JSON.stringify({ managedBy: 'agy-usage-installer', plugin: 'agy-usage' }),
+    join(stageConflictingManifest, '.agy-usage-tool-managed-backup.json'),
+    JSON.stringify({ managedBy: 'agy-usage-tool-installer', plugin: 'agy-usage-tool' }),
     'utf8'
   );
 
@@ -699,24 +723,30 @@ test('installPlugin cleans only verified agy-usage backups inside sibling stage'
   assert.equal(existsSync(join(stageConflictingManifest, 'plugin.json')), true);
 });
 
-test('installPlugin marks locked backup with managed marker and cleans it on next install', { timeout: 30000 }, async (t) => {
+test('installPlugin marks locked backup and locked legacy agy-usage manifests safely on EBUSY', { timeout: 30000 }, async (t) => {
   const homeRoot = await mkdtemp(join(tmpdir(), 'agy-mcp-locked-backup-'));
   t.after(async () => {
     await rm(homeRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
   const defaults = getDefaultPluginPaths(homeRoot);
-  const stageRoot = join(homeRoot, '.gemini', 'config', '.agy-usage-install-stage');
+  const stageRoot = join(homeRoot, '.gemini', 'config', '.agy-usage-tool-install-stage');
   await mkdir(defaults.dest, { recursive: true });
-  await writeFile(join(defaults.dest, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '0.9.0' }), 'utf8');
+  await writeFile(join(defaults.dest, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' }), 'utf8');
   await writeFile(join(defaults.dest, 'mcp_config.json'), '{}', 'utf8');
 
-  // Scenario C: Locked backup on successful swap strips manifests + writes managed marker, then next install cleans it
+  const legacyAgyUsage = join(defaults.pluginsRoot, 'agy-usage');
+  await mkdir(legacyAgyUsage, { recursive: true });
+  await writeFile(join(legacyAgyUsage, 'plugin.json'), JSON.stringify({ name: 'agy-usage', version: '1.1.3' }), 'utf8');
+  await writeFile(join(legacyAgyUsage, 'mcp_config.json'), '{}', 'utf8');
+
+  // Scenario C: Locked backup on successful swap strips manifests + writes managed marker, then next install cleans it;
+  // locked legacy dir also strips plugin.json + mcp_config.json so it cannot stay active
   await installPlugin({
     homeDir: homeRoot,
     build: false,
     _rm: async (targetPath, opts) => {
-      if (targetPath.endsWith('-previous')) {
+      if (targetPath.endsWith('-previous') || targetPath === legacyAgyUsage) {
         const err = new Error('simulated EBUSY');
         err.code = 'EBUSY';
         throw err;
@@ -731,13 +761,16 @@ test('installPlugin marks locked backup with managed marker and cleans it on nex
   assert.equal(existsSync(join(retainedDir, 'plugin.json')), false);
   assert.equal(existsSync(join(retainedDir, 'mcp_config.json')), false);
   assert.deepEqual(
-    JSON.parse(await readFile(join(retainedDir, '.agy-usage-managed-backup.json'), 'utf8')),
-    { managedBy: 'agy-usage-installer', plugin: 'agy-usage' }
+    JSON.parse(await readFile(join(retainedDir, '.agy-usage-tool-managed-backup.json'), 'utf8')),
+    { managedBy: 'agy-usage-tool-installer', plugin: 'agy-usage-tool' }
   );
+  assert.equal(existsSync(join(legacyAgyUsage, 'plugin.json')), false);
+  assert.equal(existsSync(join(legacyAgyUsage, 'mcp_config.json')), false);
 
   await installPlugin({ homeDir: homeRoot, build: false });
   assert.equal(existsSync(retainedDir), false, 'Previously locked marked backup must be cleaned on next install');
-  assert.equal(existsSync(stageRoot), false, 'Empty .agy-usage-install-stage should be removed');
+  assert.equal(existsSync(legacyAgyUsage), false, 'Previously locked legacy dir must be cleaned when unlocked');
+  assert.equal(existsSync(stageRoot), false, 'Empty .agy-usage-tool-install-stage should be removed');
 });
 
 test('packagePluginZip builds verifiable cross-platform archive with exact 34 backend modules and zero .git', { timeout: 30000 }, async (t) => {
@@ -798,7 +831,7 @@ test('packagePluginZip rejects bundles with unreferenced files inside backend/di
 
   const bundleDir = join(tempRoot, 'bundle');
   const outDir = join(tempRoot, 'out');
-  const defaultArtifactsBundle = join(repoRoot, 'artifacts', 'agy-usage');
+  const defaultArtifactsBundle = join(repoRoot, 'artifacts', 'agy-usage-tool');
   if (existsSync(join(defaultArtifactsBundle, 'plugin.json'))) {
     await cp(defaultArtifactsBundle, bundleDir, { recursive: true });
   } else {

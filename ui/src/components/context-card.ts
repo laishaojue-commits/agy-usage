@@ -276,14 +276,27 @@ export function renderModelStagesCard(
             const stageUsed = stage.hasUsageData
               ? stage.usedTokensCompact || formatContextTokens(stage.usedTokens)
               : '0';
+            const isPendingPlaceholder =
+              stage.modelId === 'pending' ||
+              stage.modelId === 'unknown' ||
+              stage.modelDisplayName === '—' ||
+              !(stage.modelDisplayName || stage.shortLabel);
+            const stageLabel = isPendingPlaceholder
+              ? stage.role === 'executor'
+                ? t('win.context.pending_executor')
+                : stage.role === 'planner'
+                  ? t('win.context.pending_planner')
+                  : t('win.context.pending_model')
+              : stage.modelDisplayName || stage.shortLabel;
             return `
               <div class="gb-ctx-stage-row ${stage.isActive ? 'active' : ''}">
                 <div class="gb-ctx-stage-top">
                   <div class="gb-ctx-stage-name">
-                    ${renderModelIcon(stage.modelId || stage.modelDisplayName, 15)}
-                    <span>${escapeHtml(stage.modelDisplayName || stage.shortLabel || '—')}</span>
+                    ${renderModelIcon(stage.modelId || stage.modelDisplayName || stageLabel, 15)}
+                    <span>${escapeHtml(stageLabel)}</span>
                     ${roleLabel ? `<span class="gb-badge neutral">${escapeHtml(roleLabel)}</span>` : ''}
                     ${stage.isActive ? `<span class="gb-badge">${escapeHtml(t('win.context.role_active'))}</span>` : ''}
+                    ${!stage.hasUsageData && !isPendingPlaceholder ? `<span class="gb-badge neutral">${escapeHtml(t('win.context.role_pending'))}</span>` : ''}
                     ${
                       stage.compactionCount && stage.compactionCount > 0
                         ? `<span class="gb-badge warn">${escapeHtml(

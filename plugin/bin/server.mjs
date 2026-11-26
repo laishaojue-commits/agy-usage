@@ -23,7 +23,7 @@ console.log = redirectToStderr;
 console.info = redirectToStderr;
 console.debug = redirectToStderr;
 
-const UI_RESOURCE_URI = 'ui://agy-usage/app.html';
+const UI_RESOURCE_URI = 'ui://agy-usage-tool/app.html';
 const VALID_VIEWS = new Set(['overview', 'context', 'usage', 'storage', 'settings', 'about']);
 const VALID_THEMES = new Set(['system', 'light', 'dark']);
 const MAX_UI_HTML_BYTES = 10 * 1024 * 1024;
@@ -147,14 +147,7 @@ const { assertSafeJson, parseSafeJson, SAFE_CONVERSATION_ID_RE, MAX_MESSAGE_BYTE
 const { LocalUsageStatsManager } = usageMod;
 const { ConversationContextService } = contextMod;
 const { LocalCacheMaintenance } = maintenanceMod;
-const {
-  bt,
-  getActiveLocale,
-  resolveInitialRuntimeLanguage,
-  resolveLocale,
-  normalizeLocale,
-  setActiveLocale,
-} = i18nMod;
+const { bt } = i18nMod;
 const { atomicJson, sanitizeError } = filesMod;
 const {
   projectAllUsagePeriodSummaries,
@@ -170,11 +163,11 @@ const {
 } = pathsMod;
 
 const pkgVersion = await readFile(layout.pkgJsonPath, 'utf8')
-  .then((raw) => JSON.parse(raw).version || '0.0.0')
-  .catch(() => '0.0.0');
+  .then((raw) => JSON.parse(raw).version || '0.1.0')
+  .catch(() => '0.1.0');
 
 const dataDir = resolve(
-  cli.dataDir || process.env.GRAVITYBOX_DATA_DIR || join(defaultStateDir(), 'agy-usage-plugin')
+  cli.dataDir || process.env.GRAVITYBOX_DATA_DIR || join(defaultStateDir(), 'agy-usage-tool')
 );
 const stateDir = resolve(
   cli.stateDir || process.env.GRAVITYBOX_STATE_DIR || defaultStateDir()
@@ -187,23 +180,11 @@ const uiPrefsPath = join(dataDir, 'ui-prefs.json');
 
 function sanitizeUiPrefs(raw) {
   const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const language =
-    normalizeRequestedLanguage(obj.language) ?? 'system';
   const theme = VALID_THEMES.has(obj.theme) ? obj.theme : 'system';
   return {
-    language,
     theme,
     ...(typeof obj.updatedAt === 'string' ? { updatedAt: obj.updatedAt } : {}),
   };
-}
-
-function normalizeRequestedLanguage(value) {
-  if (typeof value !== 'string' || value.length > 35) return null;
-  const language = value.trim();
-  if (language === 'system') return 'system';
-  if (!/^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8}){0,4}$/.test(language)) return null;
-  const normalized = normalizeLocale(language);
-  return normalized === 'en' || normalized === 'zh-Hans' ? normalized : null;
 }
 
 async function readPreferenceFile() {
@@ -230,10 +211,6 @@ async function ensureContext() {
     const appPath = cli.appPath || defaultAntigravityAppDirs()[0] || '';
     const profile = cli.profileDir || defaultAntigravityProfileDir();
     const initialPrefs = sanitizeUiPrefs(await readPreferenceFile());
-    const initialLang = resolveInitialRuntimeLanguage({ configuredLanguage: initialPrefs.language });
-    setActiveLocale(initialLang.resolvedLocale);
-
-    let configuredLanguage = initialLang.configuredLanguage;
     let cachedUiPrefs = { ...initialPrefs };
 
     const trashDir = isWindows() ? join(defaultCacheDir(), 'maintenance-trash') : join(homedir(), '.Trash');
@@ -247,6 +224,7 @@ async function ensureContext() {
     const usageManager = new LocalUsageStatsManager({ stateDir, geminiDir });
     const contextService = new ConversationContextService({ stateDir, geminiDir });
     await usageManager.hydratePricingCatalog().catch(() => {});
+
     async function buildPricingCatalogPayload() {
       const catalogRaw = await usageManager.getRawPricingCatalog();
       const payload = resolvePricingCatalogSnapshot({
@@ -280,9 +258,6 @@ async function ensureContext() {
       const prev = await readUiPrefs();
       const next = sanitizeUiPrefs({
         ...prev,
-        ...(typeof patch.language === 'string' && patch.language.trim()
-          ? { language: patch.language.trim() }
-          : {}),
         ...(VALID_THEMES.has(patch.theme) ? { theme: patch.theme } : {}),
         updatedAt: new Date().toISOString(),
       });
@@ -290,9 +265,6 @@ async function ensureContext() {
       if (!(await lstat(dataDir)).isDirectory()) throw new Error('Invalid preference directory');
       await atomicJson(uiPrefsPath, next);
       cachedUiPrefs = next;
-      if (typeof patch.language === 'string' && patch.language.trim()) {
-        configuredLanguage = next.language;
-      }
       return { ...next };
     }
 
@@ -314,25 +286,16 @@ async function ensureContext() {
     }
 
     async function buildStandaloneStatus() {
-      const locale = getActiveLocale();
-      const message =
-        locale === 'zh-Hans'
-          ? '纯本地只读模式已就绪'
-          : 'Pure Local Read-Only Mode Ready';
-
       return {
         schema: 1,
         mode: 'mcp-direct',
-        message,
+        message: '纯本地只读模式已就绪',
         windows: 0,
         errors: [],
         rssMB: Math.round(process.memoryUsage().rss / (1024 * 1024)),
         updatedAt: new Date().toISOString(),
         pid: process.pid,
-        translationEnabled: false,
-        hudEnabled: false,
-        locale,
-        configuredLanguage,
+        locale: 'zh-Hans',
         readOnlyMode,
         platform: process.platform,
         pricingRevision: usageManager.getPricingRevision(),
@@ -410,14 +373,12 @@ async function ensureContext() {
       }
 
       if (PURE_LOCAL_DISABLED_COMMANDS.has(command)) {
-        const zh = getActiveLocale() === 'zh-Hans';
         return {
           ok: false,
           code: 'PURE_LOCAL_READ_ONLY',
           readOnlyMode: true,
-          error: zh
-            ? 'agy-usage 当前运行在纯本地只读模式：已禁用进程探测、OAuth 凭据读取与外部控制命令（仅提供本地 SQLite 用量分析与存储体检）。'
-            : 'agy-usage is running in pure local read-only mode: process probing, OAuth credential reads, and external control commands are disabled (local SQLite usage analytics & storage inspection only).',
+          error:
+            'agy-usage-tool 当前运行在纯本地只读模式：已禁用进程探测、OAuth 凭据读取与外部控制命令（仅提供本地 SQLite 用量分析与存储体检）。',
         };
       }
 
@@ -434,18 +395,10 @@ async function ensureContext() {
       }
 
       if (command === 'ui_prefs_set') {
-        const language = normalizeRequestedLanguage(parsed.language);
-        if (parsed.language !== undefined && !language) return { ok: false, error: 'Unsupported language' };
-        const prefs = await writeUiPrefs({
-          language,
-          theme: parsed.theme,
-        });
-        if (typeof parsed.language === 'string' && parsed.language.trim()) {
-          const resolved = resolveLocale(prefs.language);
-          setActiveLocale(resolved);
-          usageManager.invalidateCache();
-          contextService.clearCache();
+        if (parsed.theme !== undefined && !VALID_THEMES.has(parsed.theme)) {
+          return { ok: false, error: 'Unsupported theme' };
         }
+        const prefs = await writeUiPrefs({ theme: parsed.theme });
         return { ok: true, prefs };
       }
 
@@ -543,27 +496,6 @@ async function ensureContext() {
         return { ok: true, snapshots: await cacheMaintenance.history() };
       }
 
-      if (command === 'language_set') {
-        const requested = normalizeRequestedLanguage(parsed.language);
-        if (!requested) return { ok: false, error: 'Unsupported language' };
-        const systemLocales = parsed.systemLocales;
-        if (systemLocales !== undefined &&
-            (!Array.isArray(systemLocales) || systemLocales.length > 16 ||
-              systemLocales.some(v => typeof v !== 'string' || v.length > 35))) {
-          return { ok: false, error: 'Invalid system locales' };
-        }
-        const resolved = resolveLocale(requested, systemLocales?.length ? systemLocales : undefined);
-        configuredLanguage = requested;
-        setActiveLocale(resolved);
-        usageManager.invalidateCache();
-        contextService.clearCache();
-        await writeUiPrefs({ language: requested });
-        return {
-          ok: true,
-          status: await buildStandaloneStatus(),
-        };
-      }
-
       return { ok: false, error: bt('main.unknown_command') };
     }
 
@@ -586,7 +518,7 @@ function resolveHtmlPath() {
 
 const server = new Server(
   {
-    name: 'agy-usage',
+    name: 'agy-usage-tool',
     version: pkgVersion,
   },
   {
@@ -602,8 +534,8 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
     resources: [
       {
         uri: UI_RESOURCE_URI,
-        name: 'agy-usage Dashboard',
-        description: 'agy-usage pure local read-only dashboard UI (self-contained single-file MCP App)',
+        name: 'agy-usage-tool Dashboard',
+        description: 'agy-usage-tool 纯本地只读面板（单文件自包含 MCP App）',
         mimeType: 'text/html;profile=mcp-app',
         _meta: {
           ui: {
@@ -635,11 +567,11 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   } catch (err) {
     throw new McpError(
       ErrorCode.InternalError,
-      `Failed to read agy-usage MCP App HTML (${sanitizeError(err?.message || String(err))})`
+      `Failed to read agy-usage-tool MCP App HTML (${sanitizeError(err?.message || String(err))})`
     );
   }
   if (!html || Buffer.byteLength(html, 'utf8') > MAX_UI_HTML_BYTES) {
-    throw new McpError(ErrorCode.InternalError, 'agy-usage MCP App HTML is empty or exceeds 10 MiB limit');
+    throw new McpError(ErrorCode.InternalError, 'agy-usage-tool MCP App HTML is empty or exceeds 10 MiB limit');
   }
   return {
     contents: [
@@ -663,10 +595,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: 'open_agy_usage',
-        title: 'agy-usage',
+        name: 'open_agy_usage_tool',
+        title: 'agy-usage-tool',
         description:
-          'Open the agy-usage pure local read-only dashboard (overview, conversation context & Swarm/subagent watermark monitor, token/cost usage analytics, read-only storage inspection, settings, and diagnostics).',
+          '打开 agy-usage-tool 纯本地只读面板（总览、对话上下文与 Swarm 水位监控、Token/费用统计、存储体检、设置与诊断）。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -689,16 +621,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           'com.google.antigravity/ui': {
             entrypoints: [
-              { type: 'aux_pane', title: 'agy-usage' },
-              { type: 'global', title: 'agy-usage' },
+              { type: 'aux_pane', title: 'agy-usage-tool' },
+              { type: 'global', title: 'agy-usage-tool' },
             ],
           },
         },
       },
       {
-        name: 'agy_usage_ipc',
-        title: 'agy-usage IPC Bridge',
-        description: 'App-only IPC bridge for agy-usage MCP App dashboard calls.',
+        name: 'agy_usage_tool_ipc',
+        title: 'agy-usage-tool IPC Bridge',
+        description: 'App-only IPC bridge for agy-usage-tool MCP App dashboard calls.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -734,7 +666,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try { assertSafeJson(args); } catch { throw new McpError(ErrorCode.InvalidParams, 'Invalid input'); }
   const ctx = await ensureContext();
 
-  if (toolName === 'open_agy_usage') {
+  if (toolName === 'open_agy_usage_tool') {
     const requestedView = typeof args.view === 'string' ? args.view : 'overview';
     const initialView = VALID_VIEWS.has(requestedView) ? requestedView : 'overview';
     const initialConversationId = args.conversationId;
@@ -746,7 +678,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       ctx.getRuntimeInfoSnapshot(),
       ctx.readUiPrefs(),
     ]);
-    const summaryText = `agy-usage opened (view: ${initialView}${initialConversationId ? `, conversationId: ${initialConversationId}` : ''}, mode: mcp-app, pureLocalReadOnly: true, readOnlyMode: ${readOnlyMode}, locale: ${getActiveLocale()}).`;
+    const summaryText = `agy-usage-tool opened (view: ${initialView}${initialConversationId ? `, conversationId: ${initialConversationId}` : ''}, mode: mcp-app, pureLocalReadOnly: true, readOnlyMode: ${readOnlyMode}, locale: zh-Hans).`;
     return {
       content: [{ type: 'text', text: summaryText }],
       structuredContent: {
@@ -758,7 +690,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  if (toolName === 'agy_usage_ipc') {
+  if (toolName === 'agy_usage_tool_ipc') {
     try {
       const payload = args.payload;
       const reply = await ctx.handleIpcPayload(payload);
@@ -779,6 +711,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${String(toolName)}`);
 });
 
+const shutdown = async () => {
+  try {
+    const ctx = await runtimeCtxPromise?.catch(() => null);
+    ctx?.usageManager?.cancelRead?.();
+  } catch {}
+  try {
+    await server.close();
+  } catch {}
+  process.exit(0);
+};
+
 // Cap each JSON-RPC frame before the SDK accumulates/parses it.
 let lineBytes = 0;
 const boundedStdin = new Transform({
@@ -797,17 +740,6 @@ const transport = new StdioServerTransport(boundedStdin);
 boundedStdin.on('error', () => void shutdown());
 process.stdin.pipe(boundedStdin);
 await server.connect(transport);
-
-const shutdown = async () => {
-  try {
-    const ctx = await runtimeCtxPromise?.catch(() => null);
-    ctx?.usageManager?.cancelRead?.();
-  } catch {}
-  try {
-    await server.close();
-  } catch {}
-  process.exit(0);
-};
 
 process.once('SIGINT', () => void shutdown());
 process.once('SIGTERM', () => void shutdown());

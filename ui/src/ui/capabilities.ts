@@ -11,7 +11,7 @@ export interface UiCapabilities {
 
 const MCP_APP_CAPABILITIES: UiCapabilities = Object.freeze({
   mode: 'mcp-app',
-  brandTitle: 'agy-usage',
+  brandTitle: 'agy-usage-tool',
   visibleViews: Object.freeze(['overview', 'context', 'usage', 'storage', 'settings', 'about'] as const),
   defaultView: 'overview',
 });

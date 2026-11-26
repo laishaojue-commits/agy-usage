@@ -70,7 +70,7 @@ export function renderStorageView(state: {
             ${escapeHtml(scan ? formatBytes(scan.totalBytes) : '--')}
           </div>
           <div class="gb-muted-text">
-            ${escapeHtml(t('maintenance.simple.protected_summary', undefined, t('maintenance.popover.protected.footer')))}
+            ${escapeHtml(t('maintenance.popover.protected.footer'))}
           </div>
         </div>
         <div class="gb-header-actions">

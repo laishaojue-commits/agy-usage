@@ -517,7 +517,6 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
   assert.ok(donutHtml.includes('stroke="#0A84FF"'));
   assert.ok(donutHtml.includes('stroke="#10B981"'));
 
-  ui.setLocalePreference('zh-Hans');
   const zhHourlyTokenChart = ui.renderStackedTrendChartSvg(
     ui.buildStackedHourlyBars(hourly, 'tokens', colorMap),
     { width: 720, height: 184, dim: 'tokens', colorMap }
@@ -535,14 +534,6 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
   );
   assert.ok(/<rect[^>]*fill="#10B981"[^>]*data-tip="今日 00:00 · gemini-4-hydrogen · 24 次请求"/.test(zhHourlyReqChart.svg));
 
-  ui.setLocalePreference('en');
-  const enHourlyTokenChart = ui.renderStackedTrendChartSvg(
-    ui.buildStackedHourlyBars(hourly, 'tokens', colorMap),
-    { width: 720, height: 184, dim: 'tokens', colorMap }
-  );
-  assert.ok(/<rect[^>]*data-tip="Today 00:00 · gemini-4-neon · 669K tokens"/.test(enHourlyTokenChart.svg));
-
-  ui.setLocalePreference('zh-Hans');
   const usageHtml = ui.renderUsageView({
     period: 'today',
     accountId: 'all',
@@ -600,11 +591,11 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
   const shell = new ui.AppShellController(app, doc, win);
   const baseSidebar = {
     activeView: 'usage',
-    status: { mode: 'mcp-direct', message: '纯本地只读模式已就绪', locale: 'zh-Hans', configuredLanguage: 'system', pid: 1001, rssMB: 50, windows: 0 },
+    status: { mode: 'mcp-direct', message: '纯本地只读模式已就绪', locale: 'zh-Hans', pid: 1001, rssMB: 50, windows: 0 },
     serviceError: null,
     busyAction: null,
     capabilities: mcpCaps,
-    brandTitle: 'agy-usage',
+    brandTitle: 'agy-usage-tool',
   };
   shell.ensureMounted(baseSidebar);
   assert.equal(app.innerHTMLWriteCount, 1);

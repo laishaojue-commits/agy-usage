@@ -58,7 +58,6 @@ export function computeStatusFingerprint(
     status?.message ?? '',
     status?.appVersion ?? '',
     status?.locale ?? '',
-    status?.configuredLanguage ?? '',
     status?.pid ?? '',
     serviceError ?? '',
   ].join('|');

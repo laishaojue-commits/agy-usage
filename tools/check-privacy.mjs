@@ -165,7 +165,7 @@ export function scanContentForPrivacy(content, filePath, options = {}) {
   for (const match of content.matchAll(WINDOWS_DRIVE_RE)) {
     const directory = match[2].trim().toLowerCase();
     if (['users', 'windows', 'program files', 'program files (x86)', 'programdata'].includes(directory)) continue;
-    if (/\.(?:test\.mjs|rs)$/.test(rel) && ['gravitybox', 'agy-usage', 'fixture', 'fake', 'demo', 'test', 'temp', 'synthetic', 'apps', 'program files'].includes(directory)) continue;
+    if (/\.(?:test\.mjs|rs)$/.test(rel) && ['gravitybox', 'agy-usage', 'agy-usage-tool', 'fixture', 'fake', 'demo', 'test', 'temp', 'synthetic', 'apps', 'program files'].includes(directory)) continue;
     issues.push({ code: 'DISALLOWED_DRIVE_PATH', file: rel, line: lineNumberAt(content, match.index), detail: 'Suspicious absolute drive path' });
   }
 
@@ -476,7 +476,7 @@ async function main() {
   const staged = process.argv.includes('--staged');
   const result = await runPrivacyCheck({ repoRoot: root, staged });
   if (process.argv.includes('--include-build')) {
-    for (const dir of ['dist', 'ui/dist-mcp', 'artifacts/agy-usage']) {
+    for (const dir of ['dist', 'ui/dist-mcp', 'artifacts/agy-usage-tool']) {
       if (!existsSync(join(root, dir))) continue;
       const built = await scanDirectoryForPrivacy(join(root, dir), { options: { includeBuild: true } });
       result.scannedCount += built.scannedCount;

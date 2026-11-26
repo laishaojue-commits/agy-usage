@@ -2,7 +2,7 @@ import appLogoUrl from '../../../assets/master-1024.png';
 import claudeIconUrl from '../../../assets/model-icons/claude.png';
 import geminiIconUrl from '../../../assets/model-icons/gemini.png';
 import openaiIconUrl from '../../../assets/model-icons/openai.png';
-import { getLocale, t } from '../i18n/l10n';
+import { t } from '../i18n/l10n';
 
 export { appLogoUrl, claudeIconUrl, geminiIconUrl, openaiIconUrl };
 
@@ -62,21 +62,18 @@ export function formatRelativeAgeShort(tsSecOrMs: number | null | undefined): st
   const ms = tsSecOrMs < 1e11 ? tsSecOrMs * 1000 : tsSecOrMs;
   const diffSec = Math.floor((Date.now() - ms) / 1000);
   if (diffSec < 60 && diffSec >= -5) return t('common.just_now');
-  const isZh = getLocale() === 'zh-Hans';
   if (diffSec >= 60 && diffSec < 3600) {
-    const mins = Math.floor(diffSec / 60);
-    return isZh ? `${mins} 分钟前` : `${mins}m ago`;
+    return `${Math.floor(diffSec / 60)} 分钟前`;
   }
   if (diffSec >= 3600 && diffSec < 86400) {
-    const hrs = Math.floor(diffSec / 3600);
-    return isZh ? `${hrs} 小时前` : `${hrs}h ago`;
+    return `${Math.floor(diffSec / 3600)} 小时前`;
   }
   return formatTimestamp(ms);
 }
 
 export function formatInt(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return Math.round(value).toLocaleString(getLocale() === 'zh-Hans' ? 'zh-CN' : 'en-US');
+  return Math.round(value).toLocaleString('zh-CN');
 }
 
 export function formatUsd(usd: number | null | undefined): string {

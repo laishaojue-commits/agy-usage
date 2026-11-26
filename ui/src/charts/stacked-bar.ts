@@ -1,5 +1,5 @@
 import type { DailyUsagePoint, HourlyUsagePoint, TrendModelBreakdown } from '../api/types';
-import { getLocale, t } from '../i18n/l10n';
+import { t } from '../i18n/l10n';
 import { escapeHtml, formatCompactNumber, formatInt } from '../utils/format';
 import { MODEL_CHART_PALETTE, type TrendBucketWithBreakdown } from './palette';
 
@@ -131,7 +131,6 @@ export function buildStackedHourlyBars(
   const resolvedColors = buildEffectiveColorMap(hourly ?? [], dim, colorMap);
   const colorOrder = createOrderMap(resolvedColors);
   const nowHour = new Date().getHours();
-  const isZh = getLocale() === 'zh-Hans';
   const out: StackedTrendBarPoint[] = [];
 
   for (let h = 0; h < 24; h++) {
@@ -141,8 +140,8 @@ export function buildStackedHourlyBars(
     const value = dim === 'requests' ? requests : tokens;
     const hh = String(h).padStart(2, '0');
     out.push({
-      label: isZh ? `今日 ${hh}:00` : `Today ${hh}:00`,
-      axisLabel: isZh ? `${hh}时` : `${hh}h`,
+      label: `今日 ${hh}:00`,
+      axisLabel: `${hh}时`,
       value,
       tokens,
       requests,
@@ -245,7 +244,6 @@ function formatSegmentTip(
   seg: StackedBarSegment,
   dim: 'tokens' | 'requests'
 ): string {
-  const isZh = getLocale() === 'zh-Hans';
   if (seg.isFallback || !seg.model) {
     if (dim === 'tokens') {
       return t('menu_panel.hover.tokens', {
@@ -253,13 +251,10 @@ function formatSegmentTip(
         tokens: formatCompactNumber(pt.tokens),
       });
     }
-    if (isZh) {
-      return t('menu_panel.hover.requests', {
-        label: pt.label,
-        count: formatInt(pt.requests),
-      });
-    }
-    return `${pt.label} · ${formatInt(pt.requests)} ${pt.requests === 1 ? 'request' : 'requests'}`;
+    return t('menu_panel.hover.requests', {
+      label: pt.label,
+      count: formatInt(pt.requests),
+    });
   }
 
   if (dim === 'tokens') {
@@ -269,15 +264,7 @@ function formatSegmentTip(
       tokens: formatCompactNumber(seg.tokens),
     });
   }
-  if (isZh) {
-    return t('win.chart.hover_model_requests', {
-      label: pt.label,
-      model: seg.model,
-      count: formatInt(seg.requests),
-    });
-  }
-  const key = seg.requests === 1 ? 'win.chart.hover_model_requests_one' : 'win.chart.hover_model_requests_other';
-  return t(key, {
+  return t('win.chart.hover_model_requests', {
     label: pt.label,
     model: seg.model,
     count: formatInt(seg.requests),
@@ -292,14 +279,7 @@ function formatPeakSummary(peakPt: StackedTrendBarPoint | undefined, dim: 'token
       tokens: formatCompactNumber(peakPt.tokens),
     });
   }
-  if (getLocale() === 'zh-Hans') {
-    return t('win.chart.peak_requests', {
-      label: peakPt.label,
-      count: formatInt(peakPt.requests),
-    });
-  }
-  const key = peakPt.requests === 1 ? 'win.chart.peak_requests_one' : 'win.chart.peak_requests_other';
-  return t(key, {
+  return t('win.chart.peak_requests', {
     label: peakPt.label,
     count: formatInt(peakPt.requests),
   });

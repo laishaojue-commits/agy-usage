@@ -59,6 +59,7 @@ export interface HudWorkerScanResult {
   executorMetaUnchanged?: boolean;
   executorMetaDigest?: string;
   executorMetaBlob?: Uint8Array | null;
+  executorMetaBlobs?: Uint8Array[];
   trajectoryId?: string;
   metaBlobProjectedSlices: Uint8Array[];
   maxIdx: number;
@@ -422,46 +423,70 @@ function executeHudScan(req: HudWorkerScanRequest): { result: HudWorkerScanResul
     let executorMetaUnchanged = false;
     let executorMetaDigest = '';
     let executorMetaBlob: Uint8Array | null = null;
+    const executorMetaBlobs: Uint8Array[] = [];
     if (hasExecutorMetaTable) {
       try {
-        const execRow = db
-          .prepare(
-            `SELECT idx, length(data) AS dataLen, CASE WHEN length(data) <= ${inlineLimit} THEN data ELSE NULL END AS inlineData, CASE WHEN length(data) > ${inlineLimit} THEN substr(data, 1, 512) ELSE NULL END AS dataHead, CASE WHEN length(data) > ${inlineLimit} THEN substr(data, max(1, length(data) - 511), 512) ELSE NULL END AS dataTail FROM executor_metadata WHERE data IS NOT NULL ORDER BY idx DESC LIMIT 1`
-          )
-          .get() as
-          | {
-              idx: number;
-              dataLen: number;
-              inlineData: Uint8Array | null;
-              dataHead: Uint8Array | null;
-              dataTail: Uint8Array | null;
-            }
-          | undefined;
-        if (execRow && Number(execRow.dataLen ?? 0) > 0) {
-          const execIdx = Number(execRow.idx);
-          const execLen = Number(execRow.dataLen ?? 0);
+        type ExecMetaRow = {
+          idx: number;
+          dataLen: number;
+          inlineData: Uint8Array | null;
+          dataHead: Uint8Array | null;
+          dataTail: Uint8Array | null;
+        };
+        const selectExecCols = `SELECT idx, length(data) AS dataLen, CASE WHEN length(data) <= ${inlineLimit} THEN data ELSE NULL END AS inlineData, CASE WHEN length(data) > ${inlineLimit} THEN substr(data, 1, 512) ELSE NULL END AS dataHead, CASE WHEN length(data) > ${inlineLimit} THEN substr(data, max(1, length(data) - 511), 512) ELSE NULL END AS dataTail FROM executor_metadata WHERE data IS NOT NULL AND length(data) > 0`;
+        // 保留最初规划行（idx ASC 前 64 行）与最新切换行（idx DESC 448 行），避免超 512 行会话丢失早期 planner 或近期切换
+        const headRows = db.prepare(`${selectExecCols} ORDER BY idx ASC LIMIT 64`).all() as ExecMetaRow[];
+        const tailRows = db.prepare(`${selectExecCols} ORDER BY idx DESC LIMIT 448`).all() as ExecMetaRow[];
+        const byIdx = new Map<number, ExecMetaRow>();
+        for (const r of headRows) byIdx.set(Number(r.idx), r);
+        for (const r of tailRows) byIdx.set(Number(r.idx), r);
+        const validExecRows = [...byIdx.values()]
+          .filter((row) => Number(row.dataLen ?? 0) > 0)
+          .sort((a, b) => Number(a.idx) - Number(b.idx));
+        if (validExecRows.length > 0) {
           const execHasher = createHash('sha256');
-          hashRawGenRowMeta(execHasher, execIdx, execLen, execRow.inlineData, execRow.dataHead, execRow.dataTail);
+          for (const execRow of validExecRows) {
+            hashRawGenRowMeta(
+              execHasher,
+              Number(execRow.idx),
+              Number(execRow.dataLen ?? 0),
+              execRow.inlineData,
+              execRow.dataHead,
+              execRow.dataTail
+            );
+          }
           executorMetaDigest = execHasher.digest('hex');
           if (req.prevExecutorMetaDigest && executorMetaDigest === req.prevExecutorMetaDigest) {
             executorMetaUnchanged = true;
           } else {
-            const inlineBuf = execRow.inlineData && execLen <= inlineLimit ? execRow.inlineData : null;
             let execChunkStmt: ReturnType<DatabaseSync['prepare']> | undefined;
-            const projected = projectProtobuf(
-              execLen,
-              (offset, length) => {
-                if (inlineBuf) return inlineBuf.subarray(offset, offset + length);
-                execChunkStmt ??= db.prepare('SELECT substr(data, ?, ?) AS chunk FROM executor_metadata WHERE idx = ?');
-                return (
-                  (execChunkStmt.get(offset + 1, length, execIdx) as { chunk?: Uint8Array } | undefined)?.chunk ??
-                  new Uint8Array(0)
+            for (const execRow of validExecRows) {
+              const execIdx = Number(execRow.idx);
+              const execLen = Number(execRow.dataLen ?? 0);
+              const inlineBuf = execRow.inlineData && execLen <= inlineLimit ? execRow.inlineData : null;
+              try {
+                const projected = projectProtobuf(
+                  execLen,
+                  (offset, length) => {
+                    if (inlineBuf) return inlineBuf.subarray(offset, offset + length);
+                    execChunkStmt ??= db.prepare('SELECT substr(data, ?, ?) AS chunk FROM executor_metadata WHERE idx = ?');
+                    return (
+                      (execChunkStmt.get(offset + 1, length, execIdx) as { chunk?: Uint8Array } | undefined)?.chunk ??
+                      new Uint8Array(0)
+                    );
+                  },
+                  HUD_EXECUTOR_METADATA_PROJECTION,
+                  HUD_GEN_PROTO_LIMITS
                 );
-              },
-              HUD_EXECUTOR_METADATA_PROJECTION,
-              HUD_GEN_PROTO_LIMITS
-            );
-            executorMetaBlob = detachBuf(projected.data);
+                const detached = detachBuf(projected.data);
+                if (detached) {
+                  executorMetaBlobs.push(detached);
+                  executorMetaBlob = detached;
+                }
+              } catch {
+                // 单行 executor_metadata 投影异常就地跳过，保留其余历史配置行
+              }
+            }
           }
         }
       } catch {
@@ -638,6 +663,7 @@ function executeHudScan(req: HudWorkerScanRequest): { result: HudWorkerScanResul
         executorMetaUnchanged,
         executorMetaDigest,
         executorMetaBlob,
+        executorMetaBlobs,
         trajectoryId,
         metaBlobProjectedSlices,
         maxIdx,

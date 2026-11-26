@@ -1,5 +1,5 @@
 #!/bin/sh
-# agy-usage pre-push gate hook: privacy gate + full build/test suite
+# agy-usage-tool pre-push gate hook: privacy gate + full build/test suite
 if [ "$AGY_USAGE_SKIP_PRE_PUSH" = "1" ]; then
   exit 0
 fi

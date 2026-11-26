@@ -18,53 +18,83 @@ function normalizePathCompare(targetPath) {
 
 export function getDefaultPluginPaths(homeDir = homedir()) {
   const pluginsRoot = join(resolve(homeDir), '.gemini', 'config', 'plugins');
+  const legacyDir = resolve(join(pluginsRoot, 'gravitybox'));
+  const legacyAgyUsageDir = resolve(join(pluginsRoot, 'agy-usage'));
   return {
     pluginsRoot,
-    dest: resolve(join(pluginsRoot, 'agy-usage')),
-    legacyDir: resolve(join(pluginsRoot, 'gravitybox')),
+    dest: resolve(join(pluginsRoot, 'agy-usage-tool')),
+    legacyDir,
+    legacyDirs: [legacyDir, legacyAgyUsageDir],
   };
 }
 
-async function cleanupLegacyGravityBoxPlugin(legacyDir) {
+const LEGACY_MANAGED_MARKER_FILE = '.agy-usage-tool-managed-legacy.json';
+
+async function cleanupLegacyPluginDir(legacyDir, rmImpl = rm) {
   if (!existsSync(legacyDir)) {
-    return { removed: false, manifestRemoved: false, locked: false };
+    return { dir: legacyDir, removed: false, manifestRemoved: false, locked: false };
   }
   const manifestPath = join(legacyDir, 'plugin.json');
   const legacyPkgPath = join(legacyDir, 'package.json');
+  const legacyMarkerPath = join(legacyDir, LEGACY_MANAGED_MARKER_FILE);
+  const expectedName = basename(legacyDir);
 
   let isLegacyPlugin = false;
   if (existsSync(manifestPath)) {
     try {
       const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-      isLegacyPlugin = manifest?.name === 'gravitybox';
+      isLegacyPlugin = manifest?.name === 'gravitybox' || manifest?.name === 'agy-usage';
     } catch {
-      return { removed: false, manifestRemoved: false, locked: false };
+      return { dir: legacyDir, removed: false, manifestRemoved: false, locked: false };
+    }
+  } else if (existsSync(legacyMarkerPath)) {
+    try {
+      const marker = JSON.parse(await readFile(legacyMarkerPath, 'utf8'));
+      isLegacyPlugin =
+        marker?.managedBy === 'agy-usage-tool-installer' &&
+        (marker?.plugin === 'gravitybox' || marker?.plugin === 'agy-usage');
+    } catch {
+      return { dir: legacyDir, removed: false, manifestRemoved: false, locked: false };
     }
   } else if (existsSync(legacyPkgPath)) {
     try {
       const legacyPkg = JSON.parse(await readFile(legacyPkgPath, 'utf8'));
-      isLegacyPlugin = legacyPkg?.name === 'gravitybox-mcp-plugin';
+      isLegacyPlugin =
+        legacyPkg?.name === 'gravitybox-mcp-plugin' ||
+        legacyPkg?.name === 'agy-usage' ||
+        legacyPkg?.name === 'agy-usage-mcp-plugin';
     } catch {
-      return { removed: false, manifestRemoved: false, locked: false };
+      return { dir: legacyDir, removed: false, manifestRemoved: false, locked: false };
+    }
+  } else {
+    const entries = await readdir(legacyDir).catch(() => null);
+    if (Array.isArray(entries) && entries.length === 0 && (expectedName === 'gravitybox' || expectedName === 'agy-usage')) {
+      isLegacyPlugin = true;
     }
   }
 
   if (!isLegacyPlugin) {
-    return { removed: false, manifestRemoved: false, locked: false };
+    return { dir: legacyDir, removed: false, manifestRemoved: false, locked: false };
   }
 
   try {
-    await rm(legacyDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 });
-    return { removed: !existsSync(legacyDir), manifestRemoved: !existsSync(manifestPath), locked: false };
+    await rmImpl(legacyDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 });
+    return { dir: legacyDir, removed: !existsSync(legacyDir), manifestRemoved: !existsSync(manifestPath), locked: false };
   } catch (err) {
     if (
       err &&
       typeof err === 'object' &&
       (err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'ENOTEMPTY')
     ) {
-      await rm(manifestPath, { force: true }).catch(() => {});
-      await rm(join(legacyDir, 'mcp_config.json'), { force: true }).catch(() => {});
+      await rmImpl(manifestPath, { force: true }).catch(() => {});
+      await rmImpl(join(legacyDir, 'mcp_config.json'), { force: true }).catch(() => {});
+      await writeFile(
+        legacyMarkerPath,
+        JSON.stringify({ managedBy: 'agy-usage-tool-installer', plugin: expectedName }, null, 2) + '\n',
+        'utf8'
+      ).catch(() => {});
       return {
+        dir: legacyDir,
         removed: !existsSync(legacyDir),
         manifestRemoved: !existsSync(manifestPath),
         locked: existsSync(legacyDir),
@@ -133,13 +163,16 @@ export async function buildPluginArtifacts() {
   };
 }
 
-const SIBLING_STAGE_DIR_NAME = '.agy-usage-install-stage';
+const SIBLING_STAGE_DIR_NAME = '.agy-usage-tool-install-stage';
+const LEGACY_SIBLING_STAGE_DIR_NAME = '.agy-usage-install-stage';
 const MANAGED_BACKUP_DIR_RE = /^stage-\d+-\d+-previous$/;
-const MANAGED_BACKUP_MARKER_FILE = '.agy-usage-managed-backup.json';
+const MANAGED_BACKUP_MARKER_FILE = '.agy-usage-tool-managed-backup.json';
+const LEGACY_MANAGED_BACKUP_MARKER_FILE = '.agy-usage-managed-backup.json';
 const MANAGED_BACKUP_MARKER = {
-  managedBy: 'agy-usage-installer',
-  plugin: 'agy-usage',
+  managedBy: 'agy-usage-tool-installer',
+  plugin: 'agy-usage-tool',
 };
+const VALID_PLUGIN_NAMES = new Set(['agy-usage-tool', 'agy-usage']);
 
 async function readJsonIfRegularFile(filePath) {
   try {
@@ -152,8 +185,8 @@ async function readJsonIfRegularFile(filePath) {
 }
 
 /**
- * Verifies that a backup directory inside `.agy-usage-install-stage` is a non-symlink
- * directory carrying explicit ownership proof from `agy-usage` installer.
+ * Verifies that a backup directory inside `.agy-usage-tool-install-stage` is a non-symlink
+ * directory carrying explicit ownership proof from `agy-usage-tool` (or legacy `agy-usage`) installer.
  */
 export async function isManagedAgyUsageBackup(entryPath) {
   const st = await lstat(entryPath).catch(() => null);
@@ -161,22 +194,24 @@ export async function isManagedAgyUsageBackup(entryPath) {
 
   const manifest = await readJsonIfRegularFile(join(entryPath, 'plugin.json'));
   if (manifest && typeof manifest.name === 'string') {
-    return manifest.name === 'agy-usage';
+    return VALID_PLUGIN_NAMES.has(manifest.name);
   }
 
-  const marker = await readJsonIfRegularFile(join(entryPath, MANAGED_BACKUP_MARKER_FILE));
-  if (
-    marker?.managedBy === MANAGED_BACKUP_MARKER.managedBy &&
-    marker?.plugin === MANAGED_BACKUP_MARKER.plugin
-  ) {
-    return true;
+  for (const markerFile of [MANAGED_BACKUP_MARKER_FILE, LEGACY_MANAGED_BACKUP_MARKER_FILE]) {
+    const marker = await readJsonIfRegularFile(join(entryPath, markerFile));
+    if (
+      (marker?.managedBy === MANAGED_BACKUP_MARKER.managedBy || marker?.managedBy === 'agy-usage-installer') &&
+      VALID_PLUGIN_NAMES.has(marker?.plugin)
+    ) {
+      return true;
+    }
   }
 
   const pkg = await readJsonIfRegularFile(join(entryPath, 'package.json'));
   const backendPkg = await readJsonIfRegularFile(join(entryPath, 'backend', 'package.json'));
   if (
-    (pkg?.name === 'agy-usage-mcp-plugin' || pkg?.name === 'agy-usage') &&
-    backendPkg?.name === 'agy-usage-backend'
+    (pkg?.name === 'agy-usage-tool' || pkg?.name === 'agy-usage-mcp-plugin' || pkg?.name === 'agy-usage') &&
+    (backendPkg?.name === 'agy-usage-tool-backend' || backendPkg?.name === 'agy-usage-backend')
   ) {
     return true;
   }
@@ -194,13 +229,29 @@ async function stripManifestsAndMarkLockedBackup(backupDir, rmImpl = rm) {
   ).catch(() => {});
 }
 
+const NON_SIBLING_MANAGED_BACKUP_RE = /^\.agy-usage-tool-plugin-stage-\d+-\d+-previous$/;
+
 async function cleanupStaleBackups(stageRoot, excludeNames = new Set(), rmImpl = rm) {
-  if (basename(stageRoot) !== SIBLING_STAGE_DIR_NAME) return;
+  const base = basename(stageRoot);
+  if (base !== SIBLING_STAGE_DIR_NAME && base !== LEGACY_SIBLING_STAGE_DIR_NAME) return;
   const entries = await readdir(stageRoot, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     if (!entry.isDirectory() || excludeNames.has(entry.name)) continue;
     if (!MANAGED_BACKUP_DIR_RE.test(entry.name)) continue;
     const entryPath = join(stageRoot, entry.name);
+    if (!(await isManagedAgyUsageBackup(entryPath))) continue;
+    await rmImpl(entryPath, { recursive: true, force: true, maxRetries: 2, retryDelay: 40 }).catch(async () => {
+      await stripManifestsAndMarkLockedBackup(entryPath, rmImpl);
+    });
+  }
+}
+
+async function cleanupNonSiblingBackups(parentDir, excludeNames = new Set(), rmImpl = rm) {
+  const entries = await readdir(parentDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory() || excludeNames.has(entry.name)) continue;
+    if (!NON_SIBLING_MANAGED_BACKUP_RE.test(entry.name)) continue;
+    const entryPath = join(parentDir, entry.name);
     if (!(await isManagedAgyUsageBackup(entryPath))) continue;
     await rmImpl(entryPath, { recursive: true, force: true, maxRetries: 2, retryDelay: 40 }).catch(async () => {
       await stripManifestsAndMarkLockedBackup(entryPath, rmImpl);
@@ -221,10 +272,10 @@ async function validateInstallDestination(dest) {
   try {
     manifest = JSON.parse(await readFile(join(dest, 'plugin.json'), 'utf8'));
   } catch {
-    throw new Error(`Destination does not contain an agy-usage installation: ${dest}`);
+    throw new Error(`Destination does not contain an agy-usage-tool installation: ${dest}`);
   }
-  if (manifest?.name !== 'agy-usage') {
-    throw new Error(`Destination does not contain an agy-usage installation: ${dest}`);
+  if (manifest?.name !== 'agy-usage-tool') {
+    throw new Error(`Destination does not contain an agy-usage-tool installation: ${dest}`);
   }
   return existing;
 }
@@ -280,7 +331,7 @@ export async function installPlugin(options = {}) {
   await mkdir(parentDir, { recursive: true });
 
   const { stageRoot, usingSiblingStage } = await resolveStageRoot(parentDir);
-  const stagePrefix = usingSiblingStage ? 'stage-' : '.agy-usage-plugin-stage-';
+  const stagePrefix = usingSiblingStage ? 'stage-' : '.agy-usage-tool-plugin-stage-';
   const stagingDir = join(stageRoot, `${stagePrefix}${process.pid}-${Date.now()}`);
   try {
     await mkdir(join(stagingDir, 'assets'), { recursive: true });
@@ -308,7 +359,7 @@ export async function installPlugin(options = {}) {
       join(stagingDir, 'backend', 'package.json'),
       JSON.stringify(
         {
-          name: 'agy-usage-backend',
+          name: 'agy-usage-tool-backend',
           version: rootPkg.version,
           private: true,
           type: 'module',
@@ -330,11 +381,9 @@ export async function installPlugin(options = {}) {
     await cp(join(repoRoot, 'assets', 'i18n'), join(stagingDir, 'backend', 'assets', 'i18n'), {
       recursive: true,
     });
-    for (const assetFile of ['model-catalog.json', 'pricing-feed.json']) {
-      const srcAsset = join(repoRoot, 'assets', assetFile);
-      if (existsSync(srcAsset)) {
-        await copyFile(srcAsset, join(stagingDir, 'backend', 'assets', assetFile));
-      }
+    const catalogSrc = join(repoRoot, 'assets', 'model-catalog.json');
+    if (existsSync(catalogSrc)) {
+      await copyFile(catalogSrc, join(stagingDir, 'backend', 'assets', 'model-catalog.json'));
     }
 
     const privacy = await scanDirectoryForPrivacy(stagingDir, { options: { includeBuild: true } });
@@ -376,18 +425,33 @@ export async function installPlugin(options = {}) {
         movedToBackup ? new Set([basename(backup)]) : new Set(),
         rmImpl
       );
+      const legacyStage = join(dirname(stageRoot), LEGACY_SIBLING_STAGE_DIR_NAME);
+      if (existsSync(legacyStage)) {
+        await cleanupStaleBackups(legacyStage, new Set(), rmImpl);
+        await rmdir(legacyStage).catch(() => {});
+      }
+    } else {
+      await cleanupNonSiblingBackups(
+        stageRoot,
+        movedToBackup ? new Set([basename(backup)]) : new Set(),
+        rmImpl
+      );
     }
 
-    const legacyResult = isDefaultInstall
-      ? await cleanupLegacyGravityBoxPlugin(defaults.legacyDir)
-      : { removed: false, manifestRemoved: false, locked: false };
+    const legacyResults = isDefaultInstall
+      ? await Promise.all(defaults.legacyDirs.map((dir) => cleanupLegacyPluginDir(dir, rmImpl)))
+      : [];
+    const removedLegacyDirs = legacyResults.filter((r) => r.removed).map((r) => r.dir);
+    const legacyCleanupPendingDirs = legacyResults.filter((r) => r.locked).map((r) => r.dir);
 
     return {
       dest,
       version: rootPkg.version,
       htmlBytes: buildInfo.htmlBytes,
-      removedLegacyDir: legacyResult.removed ? defaults.legacyDir : null,
-      legacyCleanupPending: legacyResult.locked ? defaults.legacyDir : null,
+      removedLegacyDir: removedLegacyDirs[0] ?? null,
+      legacyCleanupPending: legacyCleanupPendingDirs[0] ?? null,
+      removedLegacyDirs,
+      legacyCleanupPendingDirs,
     };
   } catch (err) {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
@@ -399,30 +463,49 @@ export async function installPlugin(options = {}) {
   }
 }
 
+function parseDestArg(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--dest') {
+      const val = args[i + 1];
+      if (!val || val.startsWith('-')) {
+        throw new Error('Missing destination path after --dest');
+      }
+      return val;
+    }
+    if (arg.startsWith('--dest=')) {
+      const val = arg.slice('--dest='.length);
+      if (!val || val.startsWith('-')) {
+        throw new Error('Missing destination path after --dest=');
+      }
+      return val;
+    }
+  }
+  return undefined;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const buildOnly = args.includes('--build-only');
   const noBuild = args.includes('--no-build');
-  const destIdx = args.indexOf('--dest');
-  const dest = destIdx >= 0 ? args[destIdx + 1] : undefined;
+  const dest = parseDestArg(args);
 
   if (buildOnly) {
-    const info = await installPlugin({ dest: resolve(repoRoot, 'artifacts', 'agy-usage'), build: !noBuild });
-    process.stdout.write('[plugin:build] OK: artifacts/agy-usage (UI: ' + info.htmlBytes + ' bytes)\n');
+    const info = await installPlugin({ dest: resolve(repoRoot, 'artifacts', 'agy-usage-tool'), build: !noBuild });
+    process.stdout.write('[plugin:build] OK: artifacts/agy-usage-tool (UI: ' + info.htmlBytes + ' bytes)\n');
     return;
   }
 
   const res = await installPlugin({ dest, build: !noBuild });
   process.stdout.write(
-    `[plugin:install] OK: agy-usage v${res.version} installed to ${res.dest} (ui/mcp-app.html: ${res.htmlBytes} bytes)\n`
+    `[plugin:install] OK: agy-usage-tool v${res.version} installed to ${res.dest} (ui/mcp-app.html: ${res.htmlBytes} bytes)\n`
   );
-  if (res.removedLegacyDir) {
-    process.stdout.write(
-      `[plugin:install] Removed legacy gravitybox plugin directory: ${res.removedLegacyDir}\n`
-    );
-  } else if (res.legacyCleanupPending) {
+  for (const dir of res.removedLegacyDirs) {
+    process.stdout.write(`[plugin:install] Removed legacy plugin directory: ${dir}\n`);
+  }
+  for (const dir of res.legacyCleanupPendingDirs) {
     process.stderr.write(
-      `[plugin:install] Warning: legacy plugin manifests removed, but directory is still locked by an active process: ${res.legacyCleanupPending}\n`
+      `[plugin:install] Warning: legacy plugin manifests removed, but directory is still locked by an active process: ${dir}\n`
     );
   }
 }

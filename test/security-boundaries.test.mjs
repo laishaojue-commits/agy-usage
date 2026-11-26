@@ -172,7 +172,7 @@ test('scanGitHistory attributes patch sections to real file paths without relaxi
   await mkdir(join(dir, 'test'), { recursive: true });
   await mkdir(join(dir, 'src'), { recursive: true });
 
-  const fixtureStatePath = ['D:', 'agy-usage', 'State'].join('\\');
+  const fixtureStatePath = ['D:', 'agy-usage-tool', 'State'].join('\\');
   await writeFile(join(dir, 'test', 'sample.test.mjs'), `export const sample = ${JSON.stringify(fixtureStatePath)};\n`);
   git('add', 'test/sample.test.mjs');
   git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'safe fixture drive paths');

@@ -17,7 +17,7 @@ const AMBIGUOUS_ORCHESTRATOR_WRAPPER_RE = /^(?:gemini-flash-worker(?:-agy)?|gemi
 const DISPLAY_EFFORT_SUFFIX_PAREN_RE =
   /\s*[（(]\s*(?:extra[\s-]*high|extra[\s-]*low|xhigh|extra|high|medium|low|minimal|thinking|max)\s*[）)]\s*$/i;
 const DISPLAY_EFFORT_SUFFIX_SPACE_RE =
-  /\s+(?:extra[\s-]*high|extra[\s-]*low|xhigh|extra|high|medium|low|minimal|thinking|max)\s*$/i;
+  /\s+(?:extra[\s-]*(?:high|low)|xhigh|high|medium|low|minimal|thinking|max)\s*$/i;
 
 export interface RemoteModelMetadataSpec {
   displayName?: string;
@@ -427,8 +427,12 @@ export function registerObservedIdeModels(entries: readonly ObservedIdeModelEntr
     // Display name mapping (skip raw-id-as-label & internal models)
     if (displayName && entry.isInternal !== true && entry.nonChatSpecialized !== true) {
       if (displayName.toLowerCase() !== modelId.toLowerCase()) {
-        observedDisplayNames[modelId] = displayName;
-        observedDisplayNames[modelId.toLowerCase()] = displayName;
+        const cleanDisp =
+          !isWrapperOrPlaceholder && !isOrchestratorDisplayName(displayName) && !TIERED_OR_THINKING_EFFORT_SUFFIX_RE.test(normWithoutDisabled)
+            ? stripDisplayEffortSuffix(displayName)
+            : displayName;
+        observedDisplayNames[modelId] = cleanDisp;
+        observedDisplayNames[modelId.toLowerCase()] = cleanDisp;
       }
       if (aliasKey && displayName.toLowerCase() !== aliasKey.toLowerCase()) {
         observedDisplayNames[aliasKey] = displayName;
