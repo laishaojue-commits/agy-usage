@@ -103,13 +103,17 @@ interface AppState {
   dashboard: DashboardSummaryResponse | null;
   contextConversations: ConversationContextSummaryItem[];
   contextRecommendedId: string | null;
+  pinnedConversationId: string | null;
   selectedConversationId: string | null;
   contextAutoTrack: boolean;
+  inConversationSurface: boolean;
+  overviewContextSnapshot: ConversationContextSnapshot | null;
   contextSnapshot: ConversationContextSnapshot | null;
   contextShowCompleted: boolean;
   contextExpandedMemberId: string | null;
   runtimeInfo: RuntimeInfo | null;
   usagePeriod: UsagePeriodKey;
+  usageAllConversationId: string;
   usageAccountId: string;
   usageDim: 'tokens' | 'requests';
   usage: UsagePeriodResponse | null;
@@ -136,13 +140,17 @@ const state: AppState = {
   dashboard: null,
   contextConversations: [],
   contextRecommendedId: null,
+  pinnedConversationId: initialUrlConversationId,
   selectedConversationId: initialUrlConversationId,
-  contextAutoTrack: !initialUrlConversationId,
+  contextAutoTrack: false,
+  inConversationSurface: Boolean(initialUrlConversationId),
+  overviewContextSnapshot: null,
   contextSnapshot: null,
   contextShowCompleted: false,
   contextExpandedMemberId: null,
   runtimeInfo: null,
   usagePeriod: 'today',
+  usageAllConversationId: 'all',
   usageAccountId: 'all',
   usageDim: 'tokens',
   usage: null,
@@ -292,7 +300,7 @@ async function loadDashboard() {
   }
 }
 
-async function loadContextData() {
+async function loadConversationsList() {
   const listRes = await ipcCall<ContextConversationsListResponse>({
     command: 'context_conversations_list',
     limit: 30,
@@ -300,10 +308,33 @@ async function loadContextData() {
   if (listRes?.ok) {
     state.contextConversations = listRes.conversations ?? [];
     state.contextRecommendedId = listRes.recommendedId ?? null;
+    if (state.inConversationSurface && !state.pinnedConversationId && state.contextRecommendedId) {
+      state.pinnedConversationId = state.contextRecommendedId;
+    }
   }
-  const targetId = state.contextAutoTrack
-    ? state.contextRecommendedId || state.selectedConversationId || undefined
-    : state.selectedConversationId || state.contextRecommendedId || undefined;
+}
+
+async function loadOverviewContextData() {
+  await loadConversationsList();
+  const targetId = state.pinnedConversationId || state.contextRecommendedId || undefined;
+  const detailRes = await ipcCall<ContextConversationDetailResponse>({
+    command: 'context_conversation_detail',
+    ...(targetId ? { conversationId: targetId } : {}),
+  }).catch(() => null);
+  if (detailRes?.ok && detailRes.snapshot) {
+    state.overviewContextSnapshot = detailRes.snapshot;
+    if (state.inConversationSurface && !state.pinnedConversationId) {
+      state.pinnedConversationId = detailRes.snapshot.conversationId;
+    }
+  }
+}
+
+async function loadContextData() {
+  await loadConversationsList();
+  const shouldAutoTrack = state.contextAutoTrack && !state.inConversationSurface;
+  const targetId = shouldAutoTrack
+    ? state.contextRecommendedId || state.selectedConversationId || state.pinnedConversationId || undefined
+    : state.selectedConversationId || state.pinnedConversationId || state.contextRecommendedId || undefined;
 
   const detailRes = await ipcCall<ContextConversationDetailResponse>({
     command: 'context_conversation_detail',
@@ -311,7 +342,7 @@ async function loadContextData() {
   }).catch(() => null);
   if (detailRes?.ok && detailRes.snapshot) {
     state.contextSnapshot = detailRes.snapshot;
-    if (state.contextAutoTrack || !state.selectedConversationId) {
+    if (shouldAutoTrack || !state.selectedConversationId) {
       state.selectedConversationId = detailRes.snapshot.conversationId;
     }
   }
@@ -369,15 +400,42 @@ function computeContextFingerprint(
   });
 }
 
+function resolveUsageQueryTarget(): { ipcPeriod: UsagePeriodKey; conversationId?: string } {
+  if (state.usagePeriod === 'session') {
+    const convId = state.pinnedConversationId || state.contextRecommendedId || undefined;
+    return { ipcPeriod: 'session', ...(convId ? { conversationId: convId } : {}) };
+  }
+  if (state.usagePeriod === 'all' && state.usageAllConversationId !== 'all') {
+    return { ipcPeriod: 'session', conversationId: state.usageAllConversationId };
+  }
+  return { ipcPeriod: state.usagePeriod };
+}
+
 async function loadUsage(force = false) {
+  if (
+    (state.usagePeriod === 'session' && !state.pinnedConversationId && !state.contextRecommendedId) ||
+    (state.usagePeriod === 'all' && state.contextConversations.length === 0)
+  ) {
+    await loadConversationsList();
+  }
+  const target = resolveUsageQueryTarget();
   const res = await ipcCall<UsagePeriodResponse>({
     command: 'usage_summary',
-    period: state.usagePeriod,
+    period: target.ipcPeriod,
     accountId: state.usageAccountId,
+    ...(target.conversationId ? { conversationId: target.conversationId } : {}),
     force,
   });
   if (res.ok) {
     state.usage = res;
+    if (
+      state.usagePeriod === 'session' &&
+      res.conversationId &&
+      !state.pinnedConversationId &&
+      state.inConversationSurface
+    ) {
+      state.pinnedConversationId = res.conversationId;
+    }
     if (res.snapshotId && res.snapshotId !== state.activeSnapshotId) {
       await releaseUsageSnapshot();
       state.activeSnapshotId = res.snapshotId;
@@ -387,10 +445,12 @@ async function loadUsage(force = false) {
 }
 
 async function loadUsageEvents(force = false) {
+  const target = resolveUsageQueryTarget();
   const res = await ipcCall<UsageEventsResponse>({
     command: 'usage_events',
-    period: state.usagePeriod,
+    period: target.ipcPeriod,
     accountId: state.usageAccountId,
+    ...(target.conversationId ? { conversationId: target.conversationId } : {}),
     query: state.eventsQuery,
     offset: state.eventsOffset,
     limit: 20,
@@ -427,7 +487,7 @@ async function loadAboutPing() {
 
 async function loadViewPayload(view: ViewId, force: boolean): Promise<void> {
   if (view === 'overview') {
-    await Promise.all([loadDashboard(), loadContextData()]);
+    await Promise.all([loadDashboard(), loadOverviewContextData()]);
   } else if (view === 'context') {
     await loadContextData();
   } else if (view === 'usage') {
@@ -482,19 +542,24 @@ async function pollContextSync() {
   if (contextPollInFlight) return;
   if (state.activeView !== 'context' && state.activeView !== 'overview') return;
   contextPollInFlight = true;
+  const isOverview = state.activeView === 'overview';
   const prevFp = computeContextFingerprint(
     state.contextConversations,
     state.contextRecommendedId,
-    state.contextSnapshot
+    isOverview ? state.overviewContextSnapshot : state.contextSnapshot
   );
   try {
-    await loadContextData();
+    if (isOverview) {
+      await loadOverviewContextData();
+    } else {
+      await loadContextData();
+    }
     const nextFp = computeContextFingerprint(
       state.contextConversations,
       state.contextRecommendedId,
-      state.contextSnapshot
+      isOverview ? state.overviewContextSnapshot : state.contextSnapshot
     );
-    if (prevFp !== nextFp && (state.activeView === 'context' || state.activeView === 'overview')) {
+    if (prevFp !== nextFp && (isOverview ? state.activeView === 'overview' : state.activeView === 'context')) {
       scheduleRender({
         sidebar: false,
         serviceAlert: false,
@@ -557,6 +622,7 @@ async function handleAction(action: string) {
   }
 
   if (action === 'context-toggle-auto') {
+    if (state.inConversationSurface) return;
     state.contextAutoTrack = !state.contextAutoTrack;
     if (state.contextAutoTrack) {
       state.busyAction = 'context';
@@ -574,7 +640,7 @@ async function handleAction(action: string) {
   }
 
   if (action === 'context-jump-active') {
-    state.contextAutoTrack = true;
+    state.contextAutoTrack = false;
     state.selectedConversationId = state.contextRecommendedId;
     state.contextExpandedMemberId = null;
     state.busyAction = 'context';
@@ -596,7 +662,7 @@ async function handleAction(action: string) {
 
   if (action === 'copy-diagnostics') {
     const diag = {
-      appVersion: state.runtimeInfo?.appVersion || '0.1.0',
+      appVersion: state.runtimeInfo?.appVersion || '0.1.1',
       mode: uiCapabilities.mode,
       platform: state.status?.platform || state.runtimeInfo?.platform || 'unknown',
       readOnlyMode: state.status?.readOnlyMode ?? state.runtimeInfo?.readOnlyMode ?? true,
@@ -620,7 +686,7 @@ function renderViewContent(): string {
       return renderOverviewView({
         status: state.status,
         dashboard: state.dashboard,
-        contextSnapshot: state.contextSnapshot,
+        contextSnapshot: state.overviewContextSnapshot,
         loading: state.loading,
         busyAction: state.busyAction,
         capabilities: uiCapabilities,
@@ -629,8 +695,9 @@ function renderViewContent(): string {
       return renderContextView({
         conversations: state.contextConversations,
         recommendedId: state.contextRecommendedId,
-        selectedConversationId: state.selectedConversationId,
+        selectedConversationId: state.selectedConversationId || state.pinnedConversationId,
         autoTrack: state.contextAutoTrack,
+        inConversationSurface: state.inConversationSurface,
         snapshot: state.contextSnapshot,
         showCompleted: state.contextShowCompleted,
         expandedMemberId: state.contextExpandedMemberId,
@@ -648,6 +715,8 @@ function renderViewContent(): string {
         eventsOffset: state.eventsOffset,
         pricingStatus: state.pricingStatus,
         busyAction: state.busyAction,
+        conversations: state.contextConversations,
+        usageAllConversationId: state.usageAllConversationId,
       });
     case 'storage':
       return renderStorageView({
@@ -741,6 +810,17 @@ function attachEvents() {
       });
       return;
     }
+    if ('usageConversation' in target.dataset) {
+      state.usageAllConversationId = target.value?.trim() || 'all';
+      state.eventsOffset = 0;
+      state.busyAction = 'usage';
+      scheduleRender({ sidebar: false, serviceAlert: false, main: true, resetScroll: false });
+      void loadUsage(false).finally(() => {
+        state.busyAction = null;
+        scheduleRender({ sidebar: false, serviceAlert: false, main: true, resetScroll: false });
+      });
+      return;
+    }
     if ('contextConversation' in target.dataset) {
       const nextId = target.value?.trim() || null;
       state.contextAutoTrack = false;
@@ -830,14 +910,16 @@ async function bootstrap() {
     let switchedByToolResult = false;
     let toolResultDelivered = false;
     try {
-      await initMcpAppBridge({
+      const hostInfo = await initMcpAppBridge({
         onToolInput: (args) => {
           const requestedConvId =
             typeof args.conversationId === 'string' && args.conversationId.trim()
               ? args.conversationId.trim().toLowerCase()
               : null;
           if (requestedConvId) {
+            state.pinnedConversationId = requestedConvId;
             state.selectedConversationId = requestedConvId;
+            state.inConversationSurface = true;
             state.contextAutoTrack = false;
             state.contextExpandedMemberId = null;
           }
@@ -867,10 +949,12 @@ async function bootstrap() {
               ? sc.initialConversationId.trim().toLowerCase()
               : null;
           const convChanged = Boolean(
-            initialConvId && initialConvId !== state.selectedConversationId
+            initialConvId && initialConvId !== state.pinnedConversationId
           );
           if (initialConvId) {
+            state.pinnedConversationId = initialConvId;
             state.selectedConversationId = initialConvId;
+            state.inConversationSurface = true;
             state.contextAutoTrack = false;
             state.contextExpandedMemberId = null;
           }
@@ -881,14 +965,30 @@ async function bootstrap() {
               switchedByToolResult = true;
               void navigateTo(nextView);
             } else if (convChanged) {
-              void loadContextData().then(() => {
+              const reloadOps: Promise<unknown>[] = [];
+              if (state.activeView === 'overview') {
+                reloadOps.push(loadOverviewContextData());
+              } else if (state.activeView === 'context') {
+                reloadOps.push(loadContextData());
+              } else if (state.activeView === 'usage' && state.usagePeriod === 'session') {
+                reloadOps.push(loadUsage(false));
+              }
+              void Promise.all(reloadOps).then(() => {
                 scheduleRender({ sidebar: true, serviceAlert: true, main: true, resetScroll: false });
               });
             } else {
               scheduleRender({ sidebar: true, serviceAlert: true, main: true, resetScroll: false });
             }
           } else if (convChanged) {
-            void loadContextData().then(() => {
+            const reloadOps: Promise<unknown>[] = [];
+            if (state.activeView === 'overview') {
+              reloadOps.push(loadOverviewContextData());
+            } else if (state.activeView === 'context') {
+              reloadOps.push(loadContextData());
+            } else if (state.activeView === 'usage' && state.usagePeriod === 'session') {
+              reloadOps.push(loadUsage(false));
+            }
+            void Promise.all(reloadOps).then(() => {
               scheduleRender({ sidebar: true, serviceAlert: true, main: true, resetScroll: false });
             });
           } else {
@@ -901,6 +1001,10 @@ async function bootstrap() {
           }
         },
       });
+      if (hostInfo?.inConversationSurface) {
+        state.inConversationSurface = true;
+        state.contextAutoTrack = false;
+      }
       if (!toolResultDelivered) {
         const prefsRes = await ipcCall<{ ok: boolean; prefs?: UiPrefsPayload }>({ command: 'ui_prefs_get' }).catch(() => null);
         if (prefsRes?.ok && prefsRes.prefs) {

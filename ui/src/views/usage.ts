@@ -1,4 +1,5 @@
 import type {
+  ConversationContextSummaryItem,
   PricingSyncStatus,
   UsageEventsResponse,
   UsagePeriodKey,
@@ -16,6 +17,7 @@ import {
   escapeHtml,
   formatCompactNumber,
   formatInt,
+  formatRelativeAgeShort,
   formatTimestamp,
   formatUsd,
   renderModelIcon,
@@ -31,6 +33,8 @@ export function renderUsageView(state: {
   eventsOffset: number;
   pricingStatus: PricingSyncStatus | null;
   busyAction: string | null;
+  conversations?: ConversationContextSummaryItem[];
+  usageAllConversationId?: string;
 }): string {
   const {
     period,
@@ -42,6 +46,8 @@ export function renderUsageView(state: {
     eventsOffset,
     pricingStatus,
     busyAction,
+    conversations = [],
+    usageAllConversationId = 'all',
   } = state;
 
   const summary = usage?.summary;
@@ -57,17 +63,63 @@ export function renderUsageView(state: {
       ? Math.max(0, estUsd * (cachedTokens / Math.max(1, totalTokens)) * 0.75)
       : 0;
 
-  const rawTrendBuckets = period === 'today' ? usage?.todayHourly : usage?.dailyTrends;
+  const activeAllConvId =
+    usageAllConversationId && usageAllConversationId !== 'all' ? usageAllConversationId : 'all';
+  const isScopedConversation =
+    period === 'session' || (period === 'all' && activeAllConvId !== 'all');
+  const useSessionHourly = isScopedConversation && usage?.sessionSingleDay !== false;
+  const rawTrendBuckets =
+    period === 'today' || useSessionHourly ? usage?.todayHourly : usage?.dailyTrends;
   const colorMap = assignModelColors(collectOrderedChartModels(byModel, rawTrendBuckets));
   const points =
     period === 'today'
       ? buildStackedHourlyBars(usage?.todayHourly, dim, colorMap)
-      : buildStackedDailyBars(usage?.dailyTrends, dim, colorMap);
+      : useSessionHourly
+        ? buildStackedHourlyBars(usage?.todayHourly, dim, colorMap, usage?.sessionDateLabel || '今日')
+        : buildStackedDailyBars(usage?.dailyTrends, dim, colorMap);
   const trend = renderStackedTrendChartSvg(points, { width: 720, height: 184, dim, colorMap });
 
-  const periodTitle = t(`usage.trend_title.${period}`);
+  const periodTitle =
+    period === 'all' && isScopedConversation
+      ? t('usage.trend_title.scoped_conv')
+      : t(`usage.trend_title.${period}`);
   const defaultChartTip = trend.peakSummaryText || periodTitle;
   const accountsList = usage?.availableAccounts ?? [];
+  const allConvSelectorHtml =
+    period === 'all' && conversations.length > 0
+      ? `
+        <div class="gb-card gb-ctx-toolbar">
+          <div class="gb-ctx-toolbar-select-wrap">
+            <label class="gb-muted-text" for="gb-usage-conv-select">${escapeHtml(
+              t('win.usage.all_conv_label')
+            )}</label>
+            <select
+              id="gb-usage-conv-select"
+              class="gb-select gb-ctx-select"
+              data-usage-conversation
+              aria-label="${escapeHtml(t('win.usage.all_conv_label'))}"
+            >
+              <option value="all" ${activeAllConvId === 'all' ? 'selected' : ''}>${escapeHtml(
+                t('win.usage.all_conv_option')
+              )}</option>
+              ${conversations
+                .map((conv) => {
+                  const dot = conv.status === 'running' ? '●' : conv.status === 'waiting' ? '◐' : '○';
+                  const age = formatRelativeAgeShort(conv.lastActiveAt);
+                  const swarmPart =
+                    conv.childCount > 0
+                      ? ` · ${t('win.context.swarm_count_badge', { count: conv.childCount })}`
+                      : '';
+                  return `<option value="${escapeHtml(conv.conversationId)}" ${
+                    conv.conversationId === activeAllConvId ? 'selected' : ''
+                  }>${escapeHtml(`${dot} ${conv.title} · ${age}${swarmPart}`)}</option>`;
+                })
+                .join('')}
+            </select>
+          </div>
+        </div>
+      `
+      : '';
 
   const rows = events?.rows ?? [];
   const totalRows = events?.total ?? 0;
@@ -95,7 +147,7 @@ export function renderUsageView(state: {
             : ''
         }
         <div class="gb-segmented" role="tablist" aria-label="${escapeHtml(t('usage.period_a11y'))}">
-          ${(['today', '7d', '30d', 'all'] as const)
+          ${(['session', 'today', '7d', '30d', 'all'] as const)
             .map(
               (p) =>
                 `<button class="gb-seg-btn ${p === period ? 'active' : ''}" data-usage-period="${p}">${escapeHtml(
@@ -110,11 +162,13 @@ export function renderUsageView(state: {
       </div>
     </div>
 
+    ${allConvSelectorHtml}
+
     <div class="gb-card gb-chart-box">
       <div class="gb-card-header">
         <div>
           <div class="gb-muted-text">${escapeHtml(t('usage.section.token_usage'))}</div>
-          <div style="font-size:26px;font-weight:700;letter-spacing:-0.02em" class="gb-num">
+          <div class="gb-stat-hero gb-num">
             ${escapeHtml(summary ? formatCompactNumber(totalTokens) : '--')}
           </div>
           <div class="gb-muted-text gb-num">
@@ -156,7 +210,7 @@ export function renderUsageView(state: {
       <div class="gb-card">
         <div class="gb-card-header">
           <span class="gb-card-title">${escapeHtml(t('usage.section.cost'))}</span>
-          <span class="gb-num" style="font-size:20px;font-weight:700">${escapeHtml(summary ? formatUsd(estUsd) : '--')}</span>
+          <span class="gb-stat-md gb-num">${escapeHtml(summary ? formatUsd(estUsd) : '--')}</span>
         </div>
         ${renderCostDonutSvg(byModel, estUsd, colorMap)}
         ${
@@ -186,7 +240,7 @@ export function renderUsageView(state: {
               )}
             </div>
           </div>
-          <div style="font-size:22px;font-weight:700" class="gb-num">
+          <div class="gb-stat-md gb-num">
             ${escapeHtml(summary ? t('usage.requests.value', { count: formatInt(summary.requestCount) }) : '--')}
           </div>
         </div>
@@ -199,7 +253,7 @@ export function renderUsageView(state: {
                 ${roughSavingsUsd > 0 ? ` · ${escapeHtml(t('win.usage.cache_saved', { saved: formatUsd(roughSavingsUsd) }))}` : ''}
               </div>
             </div>
-            <div style="font-size:22px;font-weight:700" class="gb-num">${summary ? escapeHtml(cacheHit + '%') : '--'}</div>
+            <div class="gb-stat-md gb-num">${summary ? escapeHtml(cacheHit + '%') : '--'}</div>
           </div>
           <div class="gb-track"><div class="gb-fill ok" style="width:${Math.min(100, Math.max(0, cacheHit))}%"></div></div>
         </div>
@@ -243,7 +297,7 @@ export function renderUsageView(state: {
                         <tr>
                           <td class="gb-muted-text">${escapeHtml(formatTimestamp(r.timestamp_seconds))}</td>
                           <td>
-                            <div style="display:flex;align-items:center;gap:6px">
+                            <div class="gb-model-inline">
                               ${renderModelIcon(r.model, 15)}
                               <span>${escapeHtml(r.model)}</span>
                             </div>

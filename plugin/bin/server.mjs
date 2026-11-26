@@ -163,8 +163,8 @@ const {
 } = pathsMod;
 
 const pkgVersion = await readFile(layout.pkgJsonPath, 'utf8')
-  .then((raw) => JSON.parse(raw).version || '0.1.0')
-  .catch(() => '0.1.0');
+  .then((raw) => JSON.parse(raw).version || '0.1.1')
+  .catch(() => '0.1.1');
 
 const dataDir = resolve(
   cli.dataDir || process.env.GRAVITYBOX_DATA_DIR || join(defaultStateDir(), 'agy-usage-tool')
@@ -438,6 +438,35 @@ async function ensureContext() {
         const force = Boolean(parsed.force);
         const targetAccountId =
           typeof parsed.accountId === 'string' && parsed.accountId ? parsed.accountId : undefined;
+        if (parsed.period === 'session') {
+          const rawConvId = typeof parsed.conversationId === 'string' ? parsed.conversationId.trim() : '';
+          if (rawConvId && !SAFE_CONVERSATION_ID_RE.test(rawConvId)) {
+            return { ok: false, error: 'Invalid conversation ID' };
+          }
+          const reqConvId = rawConvId ? rawConvId.toLowerCase() : undefined;
+          const fam = await contextService.resolveConversationFamily(reqConvId);
+          const scopeLabel = fam.rootConversationId
+            ? fam.memberCount > 0
+              ? `当前对话 · ${fam.title}（含 ${fam.memberCount} 个子智能体）`
+              : `当前对话 · ${fam.title}`
+            : '暂无活跃对话';
+          const sess = await usageManager.getConversationUsageSummary(fam.dbFileNames, {
+            scopeLabel,
+            forceRefresh: force,
+            accountId: targetAccountId,
+          });
+          return {
+            ...projectUsagePeriodSummary(sess.usage, 'session', {
+              includeAllPeriods: false,
+              sessionHourly: sess.sessionHourly,
+              isSingleDay: sess.isSingleDay,
+              sessionDateLabel: sess.sessionDateLabel,
+            }),
+            conversationId: fam.rootConversationId,
+            conversationTitle: fam.title,
+            memberCount: fam.memberCount,
+          };
+        }
         const usage = await usageManager.getUsageSummary(force, targetAccountId);
         return projectUsagePeriodSummary(usage, parsed.period, {
           includeAllPeriods: !targetAccountId || targetAccountId === 'all',
@@ -445,11 +474,32 @@ async function ensureContext() {
       }
 
       if (command === 'usage_events') {
-        const period = ['today', '7d', '30d', 'all'].includes(String(parsed.period))
+        const period = ['session', 'today', '7d', '30d', 'all'].includes(String(parsed.period))
           ? String(parsed.period)
           : 'today';
         const targetAccountId =
           typeof parsed.accountId === 'string' && parsed.accountId ? parsed.accountId : undefined;
+        if (period === 'session') {
+          const rawConvId = typeof parsed.conversationId === 'string' ? parsed.conversationId.trim() : '';
+          if (rawConvId && !SAFE_CONVERSATION_ID_RE.test(rawConvId)) {
+            return { ok: false, error: 'Invalid conversation ID' };
+          }
+          const reqConvId = rawConvId ? rawConvId.toLowerCase() : undefined;
+          const fam = await contextService.resolveConversationFamily(reqConvId);
+          const scopeLabel = fam.rootConversationId ? `当前对话 · ${fam.title}` : '暂无活跃对话';
+          return {
+            ok: true,
+            ...(await usageManager.getConversationUsageEvents(
+              fam.dbFileNames,
+              String(parsed.query ?? ''),
+              Number(parsed.offset),
+              Number(parsed.limit),
+              Boolean(parsed.force),
+              targetAccountId,
+              scopeLabel
+            )),
+          };
+        }
         return {
           ok: true,
           ...(await usageManager.getUsageEvents(

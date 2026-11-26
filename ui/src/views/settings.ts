@@ -24,7 +24,7 @@ export function renderSettingsView(state: {
       </div>
     </div>
 
-    <div class="gb-view-sub" style="font-weight:600;color:var(--text-secondary)">${escapeHtml(t('win.settings.general_title'))}</div>
+    <div class="gb-section-kicker">${escapeHtml(t('win.settings.general_title'))}</div>
     <div class="gb-card gb-list-card">
       <div class="gb-row">
         <div class="gb-row-main">
@@ -41,7 +41,7 @@ export function renderSettingsView(state: {
       </div>
     </div>
 
-    <div class="gb-view-sub" style="font-weight:600;color:var(--text-secondary)">${escapeHtml(t('win.settings.security_title'))}</div>
+    <div class="gb-section-kicker">${escapeHtml(t('win.settings.security_title'))}</div>
     <div class="gb-card gb-list-card">
       <div class="gb-row">
         <div class="gb-row-main">

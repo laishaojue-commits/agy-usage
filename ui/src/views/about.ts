@@ -11,7 +11,7 @@ export function renderAboutView(state: {
 }): string {
   const { status, runtimeInfo, pingLatencyMs } = state;
   const capabilities = state.capabilities ?? getUiCapabilities('mcp-app');
-  const version = runtimeInfo?.appVersion || '0.1.0';
+  const version = runtimeInfo?.appVersion || '0.1.1';
   const pipeOk = Boolean(status);
   const readOnly = status?.readOnlyMode ?? runtimeInfo?.readOnlyMode ?? true;
   const brandTitle = capabilities.brandTitle;
@@ -66,12 +66,12 @@ export function renderAboutView(state: {
     </div>
 
     <div class="gb-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:12px">
-          <img src="${escapeHtml(appLogoUrl)}" width="44" height="44" alt="${escapeHtml(brandTitle)}" style="border-radius:10px" />
+      <div class="gb-about-hero">
+        <div class="gb-about-brand">
+          <img src="${escapeHtml(appLogoUrl)}" width="44" height="44" alt="${escapeHtml(brandTitle)}" class="gb-about-logo" />
           <div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <strong style="font-size:18px">${escapeHtml(brandTitle)}</strong>
+            <div class="gb-about-title-row">
+              <strong class="gb-about-title">${escapeHtml(brandTitle)}</strong>
               <span class="gb-badge">v${escapeHtml(version)}</span>
               <span class="gb-badge neutral">${escapeHtml(t('win.about.mcp_badge'))}</span>
             </div>
@@ -82,7 +82,7 @@ export function renderAboutView(state: {
       </div>
     </div>
 
-    <div class="gb-view-sub" style="font-weight:600;color:var(--text-secondary)">${escapeHtml(t('win.about.diag_title'))}</div>
+    <div class="gb-section-kicker">${escapeHtml(t('win.about.diag_title'))}</div>
     <div class="gb-card gb-list-card">
       ${diagnosticsRowsHtml}
     </div>

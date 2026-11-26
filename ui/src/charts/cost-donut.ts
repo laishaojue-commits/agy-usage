@@ -19,14 +19,14 @@ export function renderCostDonutSvg(
   const size = 128;
   const cx = 64;
   const cy = 64;
-  const r = 48;
+  const r = 50;
   const circumference = 2 * Math.PI * r;
 
   if (priced.length === 0 || totalUsd <= 0) {
     return `
       <div class="gb-donut-wrap">
         <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-label="${escapeHtml(t('component.donut.a11y'))}">
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--track-bg)" stroke-width="14"></circle>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--track-bg)" stroke-width="9"></circle>
           <text x="${cx}" y="${cy + 2}" text-anchor="middle" class="gb-donut-center-val">$0</text>
           <text x="${cx}" y="${cy + 16}" text-anchor="middle" class="gb-donut-center-sub">${escapeHtml(t('component.donut.equivalent_bill'))}</text>
         </svg>
@@ -59,7 +59,7 @@ export function renderCostDonutSvg(
       const frac = Math.max(0, s.usd / totalUsd);
       const dash = frac * circumference;
       const gap = Math.max(0, circumference - dash);
-      const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="14" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"></circle>`;
+      const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="9" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"></circle>`;
       offset += dash;
       return seg;
     })
@@ -81,7 +81,7 @@ export function renderCostDonutSvg(
   return `
     <div class="gb-donut-wrap">
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-label="${escapeHtml(t('component.donut.a11y'))}">
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--track-bg)" stroke-width="14"></circle>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--track-bg)" stroke-width="9"></circle>
         ${circles}
         <text x="${cx}" y="${cy}" text-anchor="middle" class="gb-donut-center-val">${escapeHtml(formatUsd(totalUsd))}</text>
         <text x="${cx}" y="${cy + 15}" text-anchor="middle" class="gb-donut-center-sub">${escapeHtml(t('component.donut.equivalent_bill'))}</text>

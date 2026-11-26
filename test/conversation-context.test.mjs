@@ -668,6 +668,26 @@ test('MCP Server context_conversations_list, context_conversation_detail, and co
   assert.equal(detailData.snapshot.members.length, 3);
   assert.equal(detailData.snapshot.swarmTotals.memberCount, 3);
 
+  const sessUsageRes = await client.request('tools/call', {
+    name: 'agy_usage_tool_ipc',
+    arguments: { payload: { command: 'usage_summary', period: 'session', conversationId: ids.mainSwarmId } },
+  });
+  const sessUsage = sessUsageRes.structuredContent;
+  assert.equal(sessUsage.ok, true);
+  assert.equal(sessUsage.period, 'session');
+  assert.equal(sessUsage.conversationId, ids.mainSwarmId);
+  assert.equal(sessUsage.memberCount, 3);
+  assert.equal(sessUsage.summary.totalTokens, 525_000 + 65_000 + 46_000 + 83_500);
+
+  const sessEventsRes = await client.request('tools/call', {
+    name: 'agy_usage_tool_ipc',
+    arguments: { payload: { command: 'usage_events', period: 'session', conversationId: ids.mainCompletedId } },
+  });
+  const sessEvents = sessEventsRes.structuredContent;
+  assert.equal(sessEvents.ok, true);
+  assert.equal(sessEvents.total, 1);
+  assert.equal(sessEvents.rows[0].total_tokens, 12_500);
+
   const exitRes = await client.close();
   assert.equal(exitRes.code, 0);
 });
@@ -736,6 +756,21 @@ test('UI context cards, K/M formatting, Swarm collapse, and overview compact car
   assert.ok(contextViewHtml.includes('整场协作总消耗汇总'));
   assert.ok(contextViewHtml.includes('720K'));
 
+  const pinnedContextHtml = ui.renderContextView({
+    conversations: list.conversations,
+    recommendedId: list.recommendedId,
+    selectedConversationId: ids.mainSwarmId,
+    autoTrack: false,
+    inConversationSurface: true,
+    snapshot,
+    showCompleted: false,
+    expandedMemberId: null,
+    loading: false,
+    busyAction: null,
+  });
+  assert.equal(pinnedContextHtml.includes('data-action="context-toggle-auto"'), false);
+  assert.ok(pinnedContextHtml.includes('已固定本对话'));
+
   const mcpCaps = ui.getUiCapabilities('mcp-app');
   const overviewHtml = ui.renderOverviewView({
     status: { mode: 'mcp-direct', message: '纯本地只读模式已就绪', windows: 0, readOnlyMode: true },
@@ -770,10 +805,10 @@ test('UI context cards, K/M formatting, Swarm collapse, and overview compact car
     busyAction: null,
     capabilities: mcpCaps,
   });
-  const bannerIdx = overviewHtml.indexOf('gb-banner');
   const ctxCardIdx = overviewHtml.indexOf('data-context-card="compact"');
   const metricsGridIdx = overviewHtml.indexOf('gb-grid-3');
-  assert.ok(bannerIdx >= 0 && ctxCardIdx > bannerIdx && metricsGridIdx > ctxCardIdx);
+  assert.equal(overviewHtml.includes('gb-banner'), false);
+  assert.ok(ctxCardIdx >= 0 && metricsGridIdx > ctxCardIdx);
   assert.ok(overviewHtml.includes('data-nav="context"'));
   assert.ok(overviewHtml.includes('319K'));
   assert.ok(overviewHtml.includes('92.5%'));

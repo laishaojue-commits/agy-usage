@@ -114,9 +114,11 @@ function createMockDom() {
 
     _mountShellChildren() {
       const aside = new FakeElement('aside', '', ['gb-sidebar'], { 'aria-label': 'nav' });
-      const brandSub = new FakeElement('div', '', ['gb-brand-sub']);
-      brandSub.dataset.brandSub = '';
-      aside.appendChild(brandSub);
+      if (this._innerHTML.includes('gb-brand-sub')) {
+        const brandSub = new FakeElement('div', '', ['gb-brand-sub']);
+        brandSub.dataset.brandSub = '';
+        aside.appendChild(brandSub);
+      }
       for (const viewId of ['overview', 'context', 'usage', 'storage', 'settings', 'about']) {
         const btn = new FakeElement('button', '', ['gb-nav-item']);
         btn.dataset.nav = viewId;
@@ -125,12 +127,15 @@ function createMockDom() {
         btn.appendChild(lbl);
         aside.appendChild(btn);
       }
+      const footer = new FakeElement('div', 'gb-sidebar-footer', ['gb-sidebar-footer']);
+      footer.hidden = /id="gb-sidebar-footer"[^>]*\bhidden\b/.test(this._innerHTML);
       const chip = new FakeElement('div', 'gb-status-chip', ['gb-status-chip']);
       const dot = new FakeElement('span', 'gb-status-dot', ['gb-dot']);
       const statusText = new FakeElement('span', 'gb-status-text');
-      aside.appendChild(chip);
-      aside.appendChild(dot);
-      aside.appendChild(statusText);
+      footer.appendChild(chip);
+      footer.appendChild(dot);
+      footer.appendChild(statusText);
+      aside.appendChild(footer);
 
       const main = new FakeElement('main', 'gb-main', ['gb-main']);
       const alertHost = new FakeElement('div', 'gb-service-alert-host', ['gb-service-alert-host']);
@@ -510,19 +515,19 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
   const ordered = ui.collectOrderedChartModels(byModel, hourly);
   assert.deepEqual(ordered, ['gemini-4-neon', 'gemini-4-hydrogen']);
   const colorMap = ui.assignModelColors(ordered);
-  assert.equal(colorMap.get('gemini-4-neon'), '#0A84FF');
-  assert.equal(colorMap.get('gemini-4-hydrogen'), '#10B981');
+  assert.equal(colorMap.get('gemini-4-neon'), '#4F46E5');
+  assert.equal(colorMap.get('gemini-4-hydrogen'), '#0D9488');
 
   const donutHtml = ui.renderCostDonutSvg(byModel, 5.7, colorMap);
-  assert.ok(donutHtml.includes('stroke="#0A84FF"'));
-  assert.ok(donutHtml.includes('stroke="#10B981"'));
+  assert.ok(donutHtml.includes('stroke="#4F46E5"'));
+  assert.ok(donutHtml.includes('stroke="#0D9488"'));
 
   const zhHourlyTokenChart = ui.renderStackedTrendChartSvg(
     ui.buildStackedHourlyBars(hourly, 'tokens', colorMap),
     { width: 720, height: 184, dim: 'tokens', colorMap }
   );
-  assert.ok(/<rect[^>]*fill="#0A84FF"[^>]*data-tip="今日 00:00 · gemini-4-neon · 669K Token"/.test(zhHourlyTokenChart.svg));
-  assert.ok(/<rect[^>]*fill="#10B981"[^>]*data-tip="今日 00:00 · gemini-4-hydrogen · 1K Token"/.test(zhHourlyTokenChart.svg));
+  assert.ok(/<rect[^>]*fill="#4F46E5"[^>]*data-tip="今日 00:00 · gemini-4-neon · 669K Token"/.test(zhHourlyTokenChart.svg));
+  assert.ok(/<rect[^>]*fill="#0D9488"[^>]*data-tip="今日 00:00 · gemini-4-hydrogen · 1K Token"/.test(zhHourlyTokenChart.svg));
   for (const m of zhHourlyTokenChart.svg.matchAll(/<rect class="gb-chart-bar active"[^>]*y="([\d.]+)"[^>]*height="([\d.]+)"/g)) {
     assert.ok(Number(m[1]) >= 14);
     assert.ok(Number(m[2]) >= 3);
@@ -532,7 +537,7 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
     ui.buildStackedHourlyBars(hourly, 'requests', colorMap),
     { width: 720, height: 184, dim: 'requests', colorMap }
   );
-  assert.ok(/<rect[^>]*fill="#10B981"[^>]*data-tip="今日 00:00 · gemini-4-hydrogen · 24 次请求"/.test(zhHourlyReqChart.svg));
+  assert.ok(/<rect[^>]*fill="#0D9488"[^>]*data-tip="今日 00:00 · gemini-4-hydrogen · 24 次请求"/.test(zhHourlyReqChart.svg));
 
   const usageHtml = ui.renderUsageView({
     period: 'today',
@@ -578,9 +583,111 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
 
   assert.equal(usageHtml.includes('模型用量'), false);
   assert.equal(usageHtml.includes('By Model'), false);
+  assert.ok(usageHtml.includes('data-usage-period="session"'));
+  assert.ok(usageHtml.includes('本对话'));
   assert.ok(usageHtml.includes('data-default-tip='));
   assert.ok(usageHtml.includes('gb-chart-legend'));
-  assert.ok(usageHtml.includes('stroke="#0A84FF"') && usageHtml.includes('fill="#0A84FF"'));
+  assert.ok(usageHtml.includes('stroke="#4F46E5"') && usageHtml.includes('fill="#4F46E5"'));
+
+  const sessionUsageHtml = ui.renderUsageView({
+    period: 'session',
+    accountId: 'all',
+    dim: 'tokens',
+    usage: {
+      ok: true,
+      period: 'session',
+      selectedAccountId: 'all',
+      availableAccounts: [],
+      sessionSingleDay: true,
+      sessionDateLabel: '11-26',
+      conversationId: 'conv-1',
+      conversationTitle: 'Current Task',
+      memberCount: 2,
+      summary: {
+        totalTokens: 670_000,
+        promptTokens: 550_000,
+        candidatesTokens: 120_000,
+        cachedTokens: 0,
+        cacheWriteTokens: 0,
+        requestCount: 34,
+        estimatedUsd: 5.7,
+        cacheHitRate: 0,
+        databasesScanned: 1,
+        databasesDiscovered: 1,
+        scanScopeDescription: '1 DB',
+        pricedModels: 2,
+        unpricedModels: 0,
+        failedDatabasesCount: 0,
+        skippedLargeRecords: 0,
+        lastScannedAt: 1700000000,
+        hasError: false,
+        availability: 'complete',
+        unknownTimeRecords: 0,
+        unknownTimeTokens: 0,
+      },
+      byModel,
+      dailyTrends: daily,
+      todayHourly: hourly,
+    },
+    events: null,
+    eventsQuery: '',
+    eventsOffset: 0,
+    pricingStatus: { autoSyncEnabled: false, lastSyncAt: 0, lastCheckAt: 0, lastSyncSuccess: false, lastCheckSuccess: false, lastSyncError: null, feedVersion: '2026-11-19-r2', sourceUrl: '', modelCount: 20 },
+    busyAction: null,
+    conversations: [
+      { conversationId: 'conv-1', title: 'Current Task', status: 'running', lastActiveAt: 1700000000, childCount: 2 },
+    ],
+  });
+  assert.equal(sessionUsageHtml.includes('data-usage-conversation'), false);
+  assert.ok(sessionUsageHtml.includes('本对话趋势'));
+
+  const allUsageHtml = ui.renderUsageView({
+    period: 'all',
+    accountId: 'all',
+    dim: 'tokens',
+    usage: {
+      ok: true,
+      period: 'all',
+      selectedAccountId: 'all',
+      availableAccounts: [],
+      summary: {
+        totalTokens: 670_000,
+        promptTokens: 550_000,
+        candidatesTokens: 120_000,
+        cachedTokens: 0,
+        cacheWriteTokens: 0,
+        requestCount: 34,
+        estimatedUsd: 5.7,
+        cacheHitRate: 0,
+        databasesScanned: 1,
+        databasesDiscovered: 1,
+        scanScopeDescription: '1 DB',
+        pricedModels: 2,
+        unpricedModels: 0,
+        failedDatabasesCount: 0,
+        skippedLargeRecords: 0,
+        lastScannedAt: 1700000000,
+        hasError: false,
+        availability: 'complete',
+        unknownTimeRecords: 0,
+        unknownTimeTokens: 0,
+      },
+      byModel,
+      dailyTrends: daily,
+      todayHourly: hourly,
+    },
+    events: null,
+    eventsQuery: '',
+    eventsOffset: 0,
+    pricingStatus: { autoSyncEnabled: false, lastSyncAt: 0, lastCheckAt: 0, lastSyncSuccess: false, lastCheckSuccess: false, lastSyncError: null, feedVersion: '2026-11-19-r2', sourceUrl: '', modelCount: 20 },
+    busyAction: null,
+    conversations: [
+      { conversationId: 'conv-1', title: 'Current Task', status: 'running', lastActiveAt: 1700000000, childCount: 2 },
+    ],
+    usageAllConversationId: 'all',
+  });
+  assert.ok(allUsageHtml.includes('data-usage-conversation'));
+  assert.ok(allUsageHtml.includes('全部对话'));
 
   const mcpCaps = ui.getUiCapabilities('mcp-app');
   assert.deepEqual(mcpCaps.visibleViews, ['overview', 'context', 'usage', 'storage', 'settings', 'about']);
@@ -599,6 +706,9 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
   };
   shell.ensureMounted(baseSidebar);
   assert.equal(app.innerHTMLWriteCount, 1);
+  assert.equal(app.innerHTML.includes('gb-brand-sub'), false);
+  const sidebarFooter = app.querySelector('#gb-sidebar-footer');
+  assert.equal(sidebarFooter?.hidden, true);
 
   const mainEl = shell.getMainElement();
   const viewHostEl = shell.getViewHostElement();
@@ -637,7 +747,13 @@ test('UI charts share model colors, stacked hover tooltips work, and AppShellCon
   shell.patchMainView({ html: '<div>Overview</div>', resetScroll: true });
   assert.equal(mainEl.scrollTop, 0);
 
+  shell.patchSidebar({ ...baseSidebar, status: { ...baseSidebar.status, mode: 'error', message: 'Offline' } });
+  assert.equal(sidebarFooter?.hidden, false);
+
   const mainTs = await readFile(join(repoRoot, 'ui', 'src', 'main.ts'), 'utf8');
   assert.equal(mainTs.includes('root.innerHTML'), false);
   assert.equal(mainTs.includes('AppShellController'), true);
+  assert.equal(mainTs.includes('overviewContextSnapshot'), true);
+  assert.equal(mainTs.includes('loadOverviewContextData'), true);
+  assert.equal(mainTs.includes('pinnedConversationId'), true);
 });

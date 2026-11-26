@@ -27,18 +27,6 @@ export function renderOverviewView(state: {
   const { dashboard, busyAction } = state;
   const usage = dashboard?.usage ?? null;
 
-  const bannerHtml = `
-    <div class="gb-banner info">
-      <div>
-        <div class="gb-banner-title">${escapeHtml(t('win.overview.mcp_direct_title'))}</div>
-        <div class="gb-banner-sub">${escapeHtml(t('win.overview.mcp_direct_meta'))}</div>
-      </div>
-      <div class="gb-banner-actions">
-        <span class="gb-badge ok">${escapeHtml(t('win.about.mcp_badge'))}</span>
-      </div>
-    </div>
-  `;
-
   const todayModels = usage?.todayByModel ?? [];
   const colorMap = assignModelColors(collectOrderedChartModels(todayModels, usage?.todayHourly));
   const hourlyBars = buildStackedHourlyBars(usage?.todayHourly, 'tokens', colorMap);
@@ -63,8 +51,6 @@ export function renderOverviewView(state: {
         </button>
       </div>
     </div>
-
-    ${bannerHtml}
 
     ${contextCardHtml}
 

@@ -17,8 +17,10 @@ import {
   type ApiPricingEntry,
 } from './pricing.js';
 import {
+  finalizeTrendBreakdowns,
   isFileCacheEntryReusable,
   ledgerEventsEqual,
+  recordTrendModelBreakdown,
   resolveDatabaseModelFullName,
   type AvailableAccountUsageOption,
   type DailyTokenUsage,
@@ -789,10 +791,208 @@ export class LocalUsageStatsManager {
     const rows = events.slice().reverse().slice(safeOffset, safeOffset + safeLimit).map(e => {
       const price = this.resolvePricing(pricingSource, e.model, e.timestamp_seconds);
       const cost = this.lockedCost(e, price);
-      const { event_key: _key, ...publicEvent } = e;
+      const { event_key: _key, db_file: _dbFile, ...publicEvent } = e;
       return { ...publicEvent, estimated_usd: cost, priced: cost !== null };
     });
     return { rows, total: events.length, offset: safeOffset, limit: safeLimit, generated_at: summary.generated_at, snapshot_id: summary.snapshot_id, availability: summary.availability, scope: summary.scan_scope_description };
+  }
+
+  private filterEventsForConversation(
+    events: readonly GenerationEvent[],
+    dbFileNames: readonly string[],
+    accountId?: string
+  ): GenerationEvent[] {
+    const targetSet = new Set(
+      dbFileNames.map((f) => basename(String(f || '').trim()).toLowerCase()).filter(Boolean)
+    );
+    if (targetSet.size === 0) return [];
+    let filtered = events.filter((e) => typeof e.db_file === 'string' && targetSet.has(e.db_file.toLowerCase()));
+    if (accountId && accountId !== 'all') {
+      const targetOpt = this.knownAccounts.find(
+        (a) => a.id === accountId || (a.email && a.email.toLowerCase() === accountId.toLowerCase())
+      );
+      const targetEmail =
+        targetOpt?.email?.toLowerCase() || (accountId.includes('@') ? accountId.toLowerCase() : null);
+      filtered = filtered.filter((e) => {
+        if (e.account_id && e.account_id === accountId) return true;
+        if (targetEmail && e.account_email && e.account_email.toLowerCase() === targetEmail) return true;
+        return false;
+      });
+    }
+    return filtered;
+  }
+
+  /** 按当前对话及其子智能体的 .db 文件集合汇总隔离的 Token 与费用统计。 */
+  async getConversationUsageSummary(
+    dbFileNames: readonly string[],
+    options?: { scopeLabel?: string; forceRefresh?: boolean; accountId?: string }
+  ): Promise<{
+    usage: TokenUsageSummary;
+    sessionHourly: HourlyTokenUsage[];
+    isSingleDay: boolean;
+    sessionDateLabel: string;
+  }> {
+    const forceRefresh = Boolean(options?.forceRefresh);
+    const accountId = options?.accountId;
+    const baseSummary = await this.getUsageSummary(forceRefresh, accountId);
+    const snap = baseSummary.snapshot_id ? this.snapshots.get(baseSummary.snapshot_id) : undefined;
+    const sessionEvents = this.filterEventsForConversation(snap?.events ?? [], dbFileNames, accountId);
+    const targetDbCount = new Set(
+      dbFileNames.map((f) => basename(String(f || '').trim()).toLowerCase()).filter(Boolean)
+    ).size;
+
+    const now = Math.floor(Date.now() / 1000);
+    const rawPricing = snap?.rawPricing ?? (await this.getBillingPricingTable());
+    const pricing = snap?.prices ?? this.resolvePricingTableFromRaw(rawPricing, now);
+    const calKey = this.calendarKey();
+    const accKey = accountId || 'all';
+    const accountMap = new Map<string, AvailableAccountUsageOption>();
+    accountMap.set('all', { id: 'all', label: bt('usage.all_accounts'), type: 'all', total_tokens: 0, request_count: 0 });
+    const knownReceiptKeys = new Set<string>();
+    const allOpt = accountMap.get('all')!;
+    let unattributedRequests = 0;
+    let unattributedTokens = 0;
+    for (const ev of sessionEvents) {
+      if (ev.event_key) knownReceiptKeys.add(ev.event_key);
+      if (ev.legacy_event_key) knownReceiptKeys.add(ev.legacy_event_key);
+      allOpt.total_tokens = (allOpt.total_tokens ?? 0) + ev.total_tokens;
+      allOpt.request_count = (allOpt.request_count ?? 0) + 1;
+      if (!ev.account_id && !ev.account_email) {
+        unattributedRequests++;
+        unattributedTokens += ev.total_tokens;
+      }
+    }
+
+    const summary = buildUsageSummaryReport({
+      allEvents: sessionEvents,
+      effectiveEvents: sessionEvents,
+      knownReceiptKeys,
+      unattributedRequests,
+      unattributedTokens,
+      accountMap,
+      accountId,
+      accKey: `session:${accKey}`,
+      now,
+      rawPricing,
+      pricing,
+      calKey,
+      rateLocks: this.rateLocks,
+      resolvePricing: (table, modelName, ts) => this.resolvePricing(table, modelName, ts),
+      lockedCost: (ev, price) => this.lockedCost(ev, price),
+      dbPathsCount: targetDbCount,
+      archivedDbCount: 0,
+      lastDiscoveredDatabaseCount: targetDbCount,
+      cachedDatabasesCount: 0,
+      liveEventsCount: sessionEvents.length,
+      generationsScanned: sessionEvents.length,
+      skippedLargeRecords: 0,
+      failedDatabasesCount: 0,
+      diagnostics: [],
+      ledgerCorrupt: this.ledgerCorrupt,
+      archivedUnavailable: this.archivedUnavailable,
+      storageWarnings: new Set(),
+      pricingWarnings: [...this.pricingWarnings],
+    });
+    summary.snapshot_id = baseSummary.snapshot_id;
+    summary.scan_scope_description = options?.scopeLabel || summary.scan_scope_description;
+
+    const distinctDates = new Set<string>();
+    for (const ev of sessionEvents) {
+      if (ev.timestamp_seconds > 0) {
+        distinctDates.add(formatLocalDate(new Date(ev.timestamp_seconds * 1000)));
+      }
+    }
+    const sortedDates = [...distinctDates].sort();
+    const todayStr = formatLocalDate(new Date());
+
+    let isSingleDay = true;
+    let sessionDateLabel = todayStr.slice(5);
+    let sessionHourly: HourlyTokenUsage[] = [];
+
+    if (sortedDates.length <= 1) {
+      const anchorDateStr = sortedDates[0] ?? todayStr;
+      sessionDateLabel = anchorDateStr === todayStr ? '今日' : anchorDateStr.slice(5);
+      const hourlyMap = new Map<string, HourlyTokenUsage>();
+      const hourlyModels = new Map<string, Map<string, TrendModelBreakdown>>();
+      for (const ev of sessionEvents) {
+        if (ev.timestamp_seconds <= 0) continue;
+        const d = new Date(ev.timestamp_seconds * 1000);
+        const dateStr = formatLocalDate(d);
+        if (dateStr !== anchorDateStr) continue;
+        const hourStr = `${dateStr} ${String(d.getHours()).padStart(2, '0')}:00`;
+        let hEntry = hourlyMap.get(hourStr);
+        if (!hEntry) {
+          hEntry = {
+            hour: hourStr,
+            input_tokens: 0,
+            output_tokens: 0,
+            cached_tokens: 0,
+            total_tokens: 0,
+            request_count: 0,
+          };
+          hourlyMap.set(hourStr, hEntry);
+        }
+        hEntry.input_tokens += ev.input_tokens;
+        hEntry.output_tokens += ev.output_tokens;
+        hEntry.cached_tokens += ev.cached_tokens;
+        if (ev.cache_write_tokens) {
+          hEntry.cache_write_tokens = (hEntry.cache_write_tokens ?? 0) + ev.cache_write_tokens;
+        }
+        hEntry.total_tokens += ev.total_tokens;
+        hEntry.request_count++;
+        const modelName = resolveDatabaseModelFullName(ev.model, null);
+        recordTrendModelBreakdown(hourlyModels, hourStr, modelName, ev.total_tokens);
+      }
+      sessionHourly = finalizeTrendBreakdowns(hourlyMap, hourlyModels).sort((a, b) => a.hour.localeCompare(b.hour));
+    } else {
+      isSingleDay = false;
+      sessionDateLabel = '';
+      const minDateStr = sortedDates[0]!;
+      const maxDateStr = sortedDates[sortedDates.length - 1]!;
+      summary.daily_trends = summary.daily_trends.filter(
+        (d) => d.date >= minDateStr && d.date <= maxDateStr
+      );
+    }
+
+    return { usage: summary, sessionHourly, isSingleDay, sessionDateLabel };
+  }
+
+  /** 返回仅包含当前对话及子智能体的脱敏请求流水明细。 */
+  async getConversationUsageEvents(
+    dbFileNames: readonly string[],
+    query = '',
+    offset = 0,
+    limit = 200,
+    force = false,
+    accountId?: string,
+    scopeLabel?: string
+  ) {
+    const baseSummary = await this.getUsageSummary(force, accountId);
+    const snap = baseSummary.snapshot_id ? this.snapshots.get(baseSummary.snapshot_id) : undefined;
+    if (!snap || snap.expires < Date.now()) throw Error(bt('usage.err.snapshot_expired'));
+    const matcher = createModelQueryMatcher(query.slice(0, 200));
+    const events = this.filterEventsForConversation(snap.events, dbFileNames, accountId).filter((e) =>
+      matcher(e.model)
+    );
+    const safeOffset = Math.max(0, Math.floor(offset) || 0);
+    const safeLimit = Math.min(500, Math.max(1, Math.floor(limit) || 200));
+    const pricingSource = snap.rawPricing ?? snap.prices;
+    const rows = events.slice().reverse().slice(safeOffset, safeOffset + safeLimit).map((e) => {
+      const price = this.resolvePricing(pricingSource, e.model, e.timestamp_seconds);
+      const cost = this.lockedCost(e, price);
+      const { event_key: _key, db_file: _dbFile, ...publicEvent } = e;
+      return { ...publicEvent, estimated_usd: cost, priced: cost !== null };
+    });
+    return {
+      rows,
+      total: events.length,
+      offset: safeOffset,
+      limit: safeLimit,
+      generated_at: baseSummary.generated_at,
+      snapshot_id: baseSummary.snapshot_id,
+      availability: baseSummary.availability,
+      scope: scopeLabel || baseSummary.scan_scope_description,
+    };
   }
 
   releaseSnapshot(id: string) {

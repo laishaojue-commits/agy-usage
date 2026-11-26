@@ -1,7 +1,7 @@
 {
   "name": "agy-usage-tool",
   "displayName": "agy-usage-tool",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "纯本地、只读的 Antigravity 用量分析、上下文水位与存储体检插件（零凭据读取，零进程探测）。",
   "logo": "assets/logo.png",
   "suggestedPrompts": [

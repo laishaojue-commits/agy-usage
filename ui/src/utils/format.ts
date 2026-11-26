@@ -119,7 +119,7 @@ export function detectModelBrand(modelName: string): ModelBrand {
   const low = String(modelName || '').toLowerCase();
   if (/claude|anthropic|opus|sonnet|haiku/.test(low)) return 'claude';
   if (/gpt|openai|^o[1-9]\b|o[1-9]-/.test(low)) return 'openai';
-  if (/gemini|google|argon|carbon/.test(low)) return 'gemini';
+  if (/gemini|google|argon|carbon|hydrogen|neon|flash/.test(low)) return 'gemini';
   return 'other';
 }
 

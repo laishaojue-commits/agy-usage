@@ -1,4 +1,4 @@
-export type UsagePeriodKey = 'today' | '7d' | '30d' | 'all';
+export type UsagePeriodKey = 'session' | 'today' | '7d' | '30d' | 'all';
 
 export interface RuntimeInfo {
   mode: 'mcp-app';
@@ -119,6 +119,11 @@ export interface UsagePeriodResponse {
   byModel: ProjectedModelUsage[];
   dailyTrends: DailyUsagePoint[];
   todayHourly: HourlyUsagePoint[];
+  sessionSingleDay?: boolean;
+  sessionDateLabel?: string;
+  conversationId?: string | null;
+  conversationTitle?: string;
+  memberCount?: number;
   periods?: Record<UsagePeriodKey, UsagePeriodResponse>;
   error?: string;
 }

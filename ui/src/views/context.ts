@@ -18,6 +18,7 @@ export function renderContextView(state: {
   recommendedId: string | null;
   selectedConversationId: string | null;
   autoTrack: boolean;
+  inConversationSurface?: boolean;
   snapshot: ConversationContextSnapshot | null;
   showCompleted: boolean;
   expandedMemberId: string | null;
@@ -29,6 +30,7 @@ export function renderContextView(state: {
     recommendedId,
     selectedConversationId,
     autoTrack,
+    inConversationSurface = false,
     snapshot,
     showCompleted,
     expandedMemberId,
@@ -75,15 +77,21 @@ export function renderContextView(state: {
             ? `<button class="gb-btn sm" data-action="context-jump-active">${escapeHtml(
                 t('win.context.jump_active')
               )}</button>`
+            : inConversationSurface
+              ? `<span class="gb-badge neutral">${escapeHtml(t('win.context.pinned_badge'))}</span>`
+              : ''
+        }
+        ${
+          !inConversationSurface
+            ? `<button
+                class="gb-btn sm ${autoTrack ? 'primary' : ''}"
+                data-action="context-toggle-auto"
+                aria-pressed="${autoTrack ? 'true' : 'false'}"
+              >
+                ${escapeHtml(t('win.context.auto_track'))}
+              </button>`
             : ''
         }
-        <button
-          class="gb-btn sm ${autoTrack ? 'primary' : ''}"
-          data-action="context-toggle-auto"
-          aria-pressed="${autoTrack ? 'true' : 'false'}"
-        >
-          ${escapeHtml(t('win.context.auto_track'))}
-        </button>
         <button
           class="gb-btn sm"
           data-action="context-refresh"

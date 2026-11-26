@@ -1,7 +1,14 @@
 import { localizePricingProvenance } from './pricing.js';
-import type { ModelTokenUsage, TokenUsagePeriod, TokenUsageSummary } from './usage-types.js';
+import type { HourlyTokenUsage, ModelTokenUsage, TokenUsagePeriod, TokenUsageSummary } from './usage-types.js';
 
-function projectSingleUsagePeriod(usage: TokenUsageSummary, periodInput: unknown) {
+export interface ProjectUsagePeriodOptions {
+  includeAllPeriods?: boolean;
+  sessionHourly?: HourlyTokenUsage[];
+  isSingleDay?: boolean;
+  sessionDateLabel?: string;
+}
+
+function projectSingleUsagePeriod(usage: TokenUsageSummary, periodInput: unknown, options?: ProjectUsagePeriodOptions) {
   const periodKey: 'today' | 'last_7_days' | 'last_30_days' | 'all_time' =
     periodInput === 'today' ? 'today' : periodInput === '7d' ? 'last_7_days' : periodInput === '30d' ? 'last_30_days' : 'all_time';
   const p: TokenUsagePeriod = usage[periodKey] ?? usage.all_time;
@@ -83,7 +90,18 @@ function projectSingleUsagePeriod(usage: TokenUsageSummary, periodInput: unknown
     byModel,
     models: byModel,
     dailyTrends: selectedTrends,
-    todayHourly: periodInput === 'today' ? safeTodayHourly : [],
+    todayHourly:
+      periodInput === 'today'
+        ? safeTodayHourly
+        : periodInput === 'session'
+          ? (options?.sessionHourly ?? [])
+          : [],
+    ...(periodInput === 'session'
+      ? {
+          sessionSingleDay: options?.isSingleDay ?? true,
+          sessionDateLabel: options?.sessionDateLabel ?? '',
+        }
+      : {}),
   };
 }
 
@@ -96,8 +114,8 @@ export function projectAllUsagePeriodSummaries(usage: TokenUsageSummary) {
   };
 }
 
-export function projectUsagePeriodSummary(usage: TokenUsageSummary, periodInput: unknown, options?: { includeAllPeriods?: boolean }) {
-  const projected = projectSingleUsagePeriod(usage, periodInput);
+export function projectUsagePeriodSummary(usage: TokenUsageSummary, periodInput: unknown, options?: ProjectUsagePeriodOptions) {
+  const projected = projectSingleUsagePeriod(usage, periodInput, options);
   if (options?.includeAllPeriods) {
     return {
       ...projected,

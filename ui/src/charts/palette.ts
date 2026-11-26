@@ -1,17 +1,17 @@
 import type { TrendModelBreakdown } from '../api/types';
 
 export const MODEL_CHART_PALETTE = [
-  '#0A84FF',
-  '#10B981',
-  '#8B5CF6',
-  '#F59E0B',
-  '#EC4899',
-  '#06B6D4',
-  '#F97316',
-  '#64748B',
+  '#4F46E5',
+  '#0D9488',
+  '#D97706',
+  '#E11D48',
+  '#0284C7',
+  '#7C3AED',
+  '#65A30D',
+  '#71717A',
 ] as const;
 
-export const OTHER_MODELS_COLOR = '#64748B';
+export const OTHER_MODELS_COLOR = '#71717A';
 
 export interface ModelColorEntry {
   model: string;

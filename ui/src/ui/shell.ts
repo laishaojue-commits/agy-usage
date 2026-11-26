@@ -14,32 +14,32 @@ export const NAV_ITEMS: ReadonlyArray<{ id: ViewId; key: string; icon: string }>
   {
     id: 'overview',
     key: 'nav.overview',
-    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
   },
   {
     id: 'context',
     key: 'win.nav.context',
-    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4a8 8 0 1 0 8 8"/><path d="M12 12l4.5-4.5"/><circle cx="12" cy="12" r="1.5"/><path d="M16 4h4v4"/></svg>',
+    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a8 8 0 1 0 8 8"/><path d="M12 12l4.5-4.5"/><circle cx="12" cy="12" r="1.5"/><path d="M16 4h4v4"/></svg>',
   },
   {
     id: 'usage',
     key: 'nav.usage',
-    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20v-4"/></svg>',
+    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20v-4"/></svg>',
   },
   {
     id: 'storage',
     key: 'win.nav.storage',
-    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="7" cy="6" r="1"/><circle cx="7" cy="12" r="1"/><circle cx="7" cy="18" r="1"/></svg>',
+    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="7" cy="6" r="1"/><circle cx="7" cy="12" r="1"/><circle cx="7" cy="18" r="1"/></svg>',
   },
   {
     id: 'settings',
     key: 'nav.settings',
-    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   },
   {
     id: 'about',
     key: 'nav.about',
-    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    icon: '<svg class="gb-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
   },
 ];
 
@@ -104,7 +104,7 @@ interface ScrollSnapshot {
 
 export class AppShellController {
   private sidebarEl: HTMLElement | null = null;
-  private brandSubEl: HTMLElement | null = null;
+  private sidebarFooterEl: HTMLElement | null = null;
   private navButtons = new Map<ViewId, HTMLButtonElement>();
   private statusChipEl: HTMLElement | null = null;
   private statusDotEl: HTMLElement | null = null;
@@ -146,6 +146,7 @@ export class AppShellController {
     ).join('');
 
     const dotCls = statusDotClass(initial.status);
+    const hideFooter = dotCls === 'ok' && !initial.serviceError;
     const statusLabel = initial.status?.message || initial.serviceError || t('sidebar.waiting_service');
 
     this.root.innerHTML = `
@@ -155,11 +156,10 @@ export class AppShellController {
             <img class="gb-brand-logo" src="${escapeHtml(appLogoUrl)}" alt="${escapeHtml(brandTitle)}" />
             <div>
               <div class="gb-brand-title">${escapeHtml(brandTitle)}</div>
-              <div class="gb-brand-sub" data-brand-sub>${escapeHtml(t('win.brand_sub_mcp'))}</div>
             </div>
           </div>
           <nav class="gb-nav">${navHtml}</nav>
-          <div class="gb-sidebar-footer">
+          <div class="gb-sidebar-footer" id="gb-sidebar-footer"${hideFooter ? ' hidden' : ''}>
             <div class="gb-status-chip" id="gb-status-chip" title="${escapeHtml(statusLabel)}">
               <span class="gb-dot ${dotCls}" id="gb-status-dot"></span>
               <span id="gb-status-text" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(statusLabel)}</span>
@@ -175,7 +175,7 @@ export class AppShellController {
     `;
 
     this.sidebarEl = this.root.querySelector<HTMLElement>('.gb-sidebar');
-    this.brandSubEl = this.root.querySelector<HTMLElement>('[data-brand-sub]');
+    this.sidebarFooterEl = this.root.querySelector<HTMLElement>('#gb-sidebar-footer');
     this.navButtons.clear();
     for (const item of visibleNavItems) {
       const btn = this.root.querySelector<HTMLButtonElement>(`[data-nav="${item.id}"]`);
@@ -206,12 +206,6 @@ export class AppShellController {
         this.sidebarEl.setAttribute('aria-label', aria);
       }
     }
-    if (this.brandSubEl) {
-      const subText = t('win.brand_sub_mcp');
-      if (this.brandSubEl.textContent !== subText) {
-        this.brandSubEl.textContent = subText;
-      }
-    }
 
     for (const item of NAV_ITEMS) {
       const btn = this.navButtons.get(item.id);
@@ -228,6 +222,9 @@ export class AppShellController {
     }
 
     const dotCls = statusDotClass(next.status);
+    if (this.sidebarFooterEl) {
+      this.sidebarFooterEl.hidden = dotCls === 'ok' && !next.serviceError;
+    }
     const expectedDotClass = dotCls ? `gb-dot ${dotCls}` : 'gb-dot';
     if (this.statusDotEl && this.statusDotEl.className !== expectedDotClass) {
       this.statusDotEl.className = expectedDotClass;

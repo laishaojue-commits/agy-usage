@@ -53,20 +53,12 @@ export function renderStorageView(state: {
       </div>
     </div>
 
-    <div class="gb-banner warn">
-      <div>
-        <div class="gb-banner-title">${escapeHtml(t('win.storage.readonly_banner_title'))}</div>
-        <div class="gb-banner-sub">${escapeHtml(t('win.storage.readonly_banner_body'))}</div>
-      </div>
-      <span class="gb-badge warn">${escapeHtml(t('win.storage.locked_badge'))}</span>
-    </div>
-
     ${loadingCardHtml || `
     <div class="gb-card">
       <div class="gb-card-header">
         <div>
           <div class="gb-muted-text">${escapeHtml(t('win.storage.reclaimable_preview'))}</div>
-          <div style="font-size:28px;font-weight:700" class="gb-num">
+          <div class="gb-stat-hero gb-num">
             ${escapeHtml(scan ? formatBytes(scan.totalBytes) : '--')}
           </div>
           <div class="gb-muted-text">
@@ -76,9 +68,6 @@ export function renderStorageView(state: {
         <div class="gb-header-actions">
           ${isScanning ? `<span class="gb-badge"><span class="gb-spinner sm" aria-hidden="true"></span>${escapeHtml(t('win.storage.scanning_btn'))}</span>` : ''}
           ${scan?.running ? `<span class="gb-badge warn">${escapeHtml(t('win.storage.running_warn'))}</span>` : ''}
-          <button class="gb-btn" disabled title="${escapeHtml(t('win.storage.readonly_banner_title'))}">
-            ${escapeHtml(t('win.storage.locked_badge'))}
-          </button>
         </div>
       </div>
 
@@ -88,7 +77,7 @@ export function renderStorageView(state: {
         <div class="gb-stack-seg protected" style="width:${protPct}%"></div>
       </div>
 
-      <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px">
+      <div class="gb-storage-legend">
         <span class="gb-num"><span class="gb-dot" style="display:inline-block;background:var(--accent);margin-right:6px"></span>${escapeHtml(t('maintenance.simple.legend_runtime', { size: formatBytes(safeBytes) }))}</span>
         <span class="gb-num"><span class="gb-dot" style="display:inline-block;background:var(--warn);margin-right:6px"></span>${escapeHtml(t('maintenance.simple.legend_history', { size: formatBytes(statefulBytes) }))}</span>
         <span class="gb-num"><span class="gb-dot" style="display:inline-block;margin-right:6px"></span>${escapeHtml(t('maintenance.simple.legend_protected', { size: formatBytes(protectedBytes) }))}</span>

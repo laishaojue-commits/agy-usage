@@ -203,14 +203,14 @@ test('Single-file MCP App HTML, plugin manifest, and 34-module AST allowlist val
   }
   assert.equal(pluginJson.name, 'agy-usage-tool');
   assert.equal(pluginJson.displayName, 'agy-usage-tool');
-  assert.equal(pluginJson.version, '0.1.0');
+  assert.equal(pluginJson.version, '0.1.1');
   assert.equal(pluginJson.logo, 'assets/logo.png');
   assert.equal(pluginJson.suggestedPrompts.length, 3);
   assert.equal(pluginJson.suggestedPrompts.every((p) => p.includes('agy-usage-tool')), true);
 
   const pluginPkg = JSON.parse(await readFile(join(pluginDir, 'package.json'), 'utf8'));
   assert.equal(pluginPkg.name, 'agy-usage-tool');
-  assert.equal(pluginPkg.version, '0.1.0');
+  assert.equal(pluginPkg.version, '0.1.1');
 
   const pluginReadme = await readFile(join(pluginDir, 'README.md'), 'utf8');
   assert.equal(pluginReadme.includes('# agy-usage-tool'), true);
@@ -277,10 +277,10 @@ test('Stdio MCP Server protocol contract, pure local read-only gate, and UI pref
   const init = await client.request('initialize', {
     protocolVersion: '2025-11-21',
     capabilities: {},
-    clientInfo: { name: 'agy-usage-tool-test', version: '0.1.0' },
+    clientInfo: { name: 'agy-usage-tool-test', version: '0.1.1' },
   });
   assert.equal(init.serverInfo?.name, 'agy-usage-tool');
-  assert.equal(init.serverInfo?.version, '0.1.0');
+  assert.equal(init.serverInfo?.version, '0.1.1');
   assert.ok(init.capabilities?.tools, 'Server must declare tools capability');
   assert.ok(init.capabilities?.resources, 'Server must declare resources capability');
   client.notify('notifications/initialized', {});
@@ -510,7 +510,7 @@ test('Self-contained plugin install runs isolated and cleans legacy gravitybox a
   const init = await client.request('initialize', {
     protocolVersion: '2025-11-21',
     capabilities: {},
-    clientInfo: { name: 'agy-usage-tool-installed-test', version: '0.1.0' },
+    clientInfo: { name: 'agy-usage-tool-installed-test', version: '0.1.1' },
   });
   assert.equal(init.serverInfo?.name, 'agy-usage-tool');
   client.notify('notifications/initialized', {});
@@ -723,7 +723,7 @@ test('installPlugin cleans only verified agy-usage-tool backups inside sibling s
   assert.equal(existsSync(join(stageConflictingManifest, 'plugin.json')), true);
 });
 
-test('installPlugin marks locked backup and locked legacy agy-usage manifests safely on EBUSY', { timeout: 30000 }, async (t) => {
+test('installPlugin marks locked backup and locked legacy agy-usage manifests safely on EBUSY', { timeout: 60000 }, async (t) => {
   const homeRoot = await mkdtemp(join(tmpdir(), 'agy-mcp-locked-backup-'));
   t.after(async () => {
     await rm(homeRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
@@ -771,6 +771,25 @@ test('installPlugin marks locked backup and locked legacy agy-usage manifests sa
   assert.equal(existsSync(retainedDir), false, 'Previously locked marked backup must be cleaned on next install');
   assert.equal(existsSync(legacyAgyUsage), false, 'Previously locked legacy dir must be cleaned when unlocked');
   assert.equal(existsSync(stageRoot), false, 'Empty .agy-usage-tool-install-stage should be removed');
+
+  // Scenario D: Destination locked by live MCP server (EBUSY on directory rename) falls back to in-place sync
+  await writeFile(join(defaults.dest, 'plugin.json'), JSON.stringify({ name: 'agy-usage-tool', version: '0.0.0' }), 'utf8');
+  await mkdir(join(defaults.dest, 'backend', 'dist'), { recursive: true });
+  await writeFile(join(defaults.dest, 'backend', 'dist', 'stale-module.js'), '// stale', 'utf8');
+  await installPlugin({
+    homeDir: homeRoot,
+    build: false,
+    _rename: async (from, to) => {
+      if (from === defaults.dest) {
+        const err = new Error('simulated destination EBUSY');
+        err.code = 'EBUSY';
+        throw err;
+      }
+      return rename(from, to);
+    },
+  });
+  assert.equal(JSON.parse(await readFile(join(defaults.dest, 'plugin.json'), 'utf8')).version, '0.1.1');
+  assert.equal(existsSync(join(defaults.dest, 'backend', 'dist', 'stale-module.js')), false);
 });
 
 test('packagePluginZip builds verifiable cross-platform archive with exact 34 backend modules and zero .git', { timeout: 30000 }, async (t) => {

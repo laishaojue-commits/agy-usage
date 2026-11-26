@@ -10,6 +10,7 @@ export interface McpHostThemeInfo {
   theme?: 'light' | 'dark';
   locale?: string;
   inline?: boolean;
+  inConversationSurface?: boolean;
 }
 
 export interface McpAppBridgeHandlers {
@@ -96,7 +97,7 @@ export async function initMcpAppBridge(handlers?: McpAppBridgeHandlers): Promise
   if (handlers) mcpHandlers = handlers;
   if (!mcpConnectPromise) {
     mcpConnectPromise = (async () => {
-      const app = new App({ name: 'agy-usage-tool', version: '0.1.0' }, {});
+      const app = new App({ name: 'agy-usage-tool', version: '0.1.1' }, {});
       mcpApp = app;
 
       // Register notification handlers strictly before connect() so initial notifications are never missed.
@@ -122,7 +123,12 @@ export async function initMcpAppBridge(handlers?: McpAppBridgeHandlers): Promise
       };
 
       await app.connect();
-      return syncHostContext(app.getHostContext(), true);
+      const info = syncHostContext(app.getHostContext(), true);
+      const hostCaps = app.getHostCapabilities();
+      info.inConversationSurface = Boolean(
+        hostCaps?.message || hostCaps?.updateModelContext || info.inline
+      );
+      return info;
     })().catch((err) => {
       mcpConnectPromise = null;
       mcpApp = null;

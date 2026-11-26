@@ -6,7 +6,7 @@
 
 | Version | Supported |
 | :--- | :--- |
-| `0.1.0` | Yes |
+| `0.1.1` | Yes |
 
 ## L0 Pure Local Read-Only Architecture
 

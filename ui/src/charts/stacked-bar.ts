@@ -121,7 +121,8 @@ function createOrderMap(colorMap: ReadonlyMap<string, string>): Map<string, numb
 export function buildStackedHourlyBars(
   hourly: HourlyUsagePoint[] | undefined,
   dim: 'tokens' | 'requests' = 'tokens',
-  colorMap?: ReadonlyMap<string, string>
+  colorMap?: ReadonlyMap<string, string>,
+  dayPrefix = '今日'
 ): StackedTrendBarPoint[] {
   const byHour = new Map<number, HourlyUsagePoint>();
   for (const pt of hourly ?? []) {
@@ -131,6 +132,8 @@ export function buildStackedHourlyBars(
   const resolvedColors = buildEffectiveColorMap(hourly ?? [], dim, colorMap);
   const colorOrder = createOrderMap(resolvedColors);
   const nowHour = new Date().getHours();
+  const isTodayPrefix = !dayPrefix || dayPrefix === '今日';
+  const effectivePrefix = dayPrefix || '今日';
   const out: StackedTrendBarPoint[] = [];
 
   for (let h = 0; h < 24; h++) {
@@ -140,12 +143,12 @@ export function buildStackedHourlyBars(
     const value = dim === 'requests' ? requests : tokens;
     const hh = String(h).padStart(2, '0');
     out.push({
-      label: `今日 ${hh}:00`,
+      label: `${effectivePrefix} ${hh}:00`,
       axisLabel: `${hh}时`,
       value,
       tokens,
       requests,
-      future: h > nowHour && tokens === 0 && requests === 0,
+      future: isTodayPrefix && h > nowHour && tokens === 0 && requests === 0,
       segments: buildSegmentsForBucket(
         rec?.by_model,
         value,
@@ -359,7 +362,7 @@ export function renderStackedTrendChartSvg(
         const seg = pt.segments[0]!;
         const segH = Math.min(plotH, Math.max(4, rawBarH));
         const segY = padTop + plotH - segH;
-        const rx = Math.min(3, barW / 2, segH / 2);
+        const rx = Math.min(1.5, barW / 2, segH / 2);
         const tip = formatSegmentTip(pt, seg, dim);
         return `<rect class="gb-chart-bar active" x="${x.toFixed(1)}" y="${segY.toFixed(1)}" width="${barW.toFixed(1)}" height="${segH.toFixed(1)}" rx="${rx.toFixed(1)}" fill="${escapeHtml(seg.color)}" data-tip="${escapeHtml(tip)}"></rect>`;
       }
@@ -383,7 +386,7 @@ export function renderStackedTrendChartSvg(
           cursorBottom = segY - gap;
           const isTop = idx === k - 1;
           const rxAttr = isTop
-            ? ` rx="${Math.min(2.5, barW / 2, segH / 2).toFixed(1)}"`
+            ? ` rx="${Math.min(1.5, barW / 2, segH / 2).toFixed(1)}"`
             : '';
           const tip = formatSegmentTip(pt, seg, dim);
           return `<rect class="gb-chart-bar active" x="${x.toFixed(1)}" y="${segY.toFixed(1)}" width="${barW.toFixed(1)}" height="${segH.toFixed(1)}"${rxAttr} fill="${escapeHtml(seg.color)}" data-tip="${escapeHtml(tip)}"></rect>`;

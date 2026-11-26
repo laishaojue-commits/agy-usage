@@ -496,7 +496,9 @@ async function scanDatabaseEventsOnce(ctx: UsageScanContext, dbPath: string, byp
       event_key: createHash('sha256').update(JSON.stringify([
         sourceId, row.idx, execution,
       ])).digest('hex'),
-      source_id: sourceId, generation_index: Number(row.idx), legacy_event_key: legacyKey,
+      source_id: sourceId,
+      db_file: basename(dbPath),
+      generation_index: Number(row.idx), legacy_event_key: legacyKey,
       account_confidence: canAttributeToCurrent ? 'observed' : 'unknown',
       model: assignedModel,
       input_tokens: inputTokens,

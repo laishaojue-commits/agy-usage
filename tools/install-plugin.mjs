@@ -394,24 +394,38 @@ export async function installPlugin(options = {}) {
     const existing = await validateInstallDestination(dest);
     const backup = stagingDir + '-previous';
     let movedToBackup = false;
+    let inPlaceUpdated = false;
     if (existing) {
-      await renameImpl(dest, backup);
-      movedToBackup = true;
-    }
-    try {
-      await renameImpl(stagingDir, dest);
-    } catch (error) {
-      if (movedToBackup) {
-        try {
-          await renameImpl(backup, dest);
-        } catch (rollbackError) {
-          throw new Error(
-            `Failed to activate staged plugin at ${dest} (${error?.message || String(error)}) and rollback failed (${rollbackError?.message || String(rollbackError)}); preserved backup at ${backup}`,
-            { cause: error }
-          );
+      try {
+        await renameImpl(dest, backup);
+        movedToBackup = true;
+      } catch (renameErr) {
+        if (renameErr && typeof renameErr === 'object' && (renameErr.code === 'EBUSY' || renameErr.code === 'EPERM')) {
+          await rmImpl(join(dest, 'backend', 'dist'), { recursive: true, force: true });
+          await cp(stagingDir, dest, { recursive: true, force: true });
+          await rmImpl(stagingDir, { recursive: true, force: true }).catch(() => {});
+          inPlaceUpdated = true;
+        } else {
+          throw renameErr;
         }
       }
-      throw error;
+    }
+    if (!inPlaceUpdated) {
+      try {
+        await renameImpl(stagingDir, dest);
+      } catch (error) {
+        if (movedToBackup) {
+          try {
+            await renameImpl(backup, dest);
+          } catch (rollbackError) {
+            throw new Error(
+              `Failed to activate staged plugin at ${dest} (${error?.message || String(error)}) and rollback failed (${rollbackError?.message || String(rollbackError)}); preserved backup at ${backup}`,
+              { cause: error }
+            );
+          }
+        }
+        throw error;
+      }
     }
     if (movedToBackup) {
       await rmImpl(backup, { recursive: true, force: true, maxRetries: 3, retryDelay: 80 }).catch(async () => {

@@ -1001,4 +1001,35 @@ export class ConversationContextService {
       swarmTotals,
     };
   }
+
+  public async resolveConversationFamily(conversationId?: string): Promise<{
+    rootConversationId: string | null;
+    title: string;
+    status: ConversationRunStatus;
+    memberCount: number;
+    dbFileNames: string[];
+  }> {
+    const snap = await this.getConversationContextSnapshot(conversationId);
+    if (!snap.available || !snap.conversationId) {
+      return {
+        rootConversationId: null,
+        title: '',
+        status: 'completed',
+        memberCount: 0,
+        dbFileNames: [],
+      };
+    }
+    const ids = new Set<string>([snap.conversationId.trim().toLowerCase()]);
+    for (const member of snap.members) {
+      const cid = member.conversationId?.trim().toLowerCase();
+      if (cid && SAFE_CONVERSATION_ID_RE.test(cid)) ids.add(cid);
+    }
+    return {
+      rootConversationId: snap.conversationId,
+      title: snap.title,
+      status: snap.status,
+      memberCount: snap.members.length,
+      dbFileNames: [...ids].map((id) => `${id}.db`),
+    };
+  }
 }

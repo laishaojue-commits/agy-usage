@@ -122,6 +122,7 @@ export interface AvailableAccountUsageOption {
 export interface GenerationEvent {
   event_key?: string;
   source_id?: string;
+  db_file?: string;
   source_observed_at?: number;
   generation_index?: number;
   legacy_event_key?: string;
